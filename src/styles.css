@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-stage-triage: #f59e0b;
+  --color-stage-ready: #2563eb;
+  --color-stage-review: #7c3aed;
+  --color-stage-acceptance: #db2777;
+  --color-stage-done: #16a34a;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
