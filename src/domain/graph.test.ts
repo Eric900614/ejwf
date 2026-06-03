@@ -9,20 +9,22 @@ describe("buildDependencyGraph", () => {
         number: 2,
         title: "项目骨架",
         state: "OPEN",
-        body: "## Blocked by\n\nNone"
+        body: "## Blocked by\n\nNone",
+        labels: [{ name: "ready-for-agent" }]
       },
       {
         number: 5,
         title: "为什么链",
         state: "OPEN",
-        body: "## Blocked by\n\n- #2"
+        body: "## Blocked by\n\n- #2",
+        labels: [{ name: "ready-for-agent" }]
       }
     ];
 
     expect(buildDependencyGraph(cards)).toEqual({
       nodes: [
-        { id: "2", card: cards[0] },
-        { id: "5", card: cards[1] }
+        { id: "2", card: cards[0], stage: "ready" },
+        { id: "5", card: cards[1], stage: "ready" }
       ],
       edges: [
         {

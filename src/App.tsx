@@ -1,5 +1,6 @@
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph } from "./domain/graph";
+import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { cards, fetchedAt, sourceRepo } from "./data/cards.generated";
 
 const graph = buildDependencyGraph(cards);
@@ -30,7 +31,21 @@ export function App() {
           <DependencyGraphView graph={graph} />
         </div>
         <aside className="rounded border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold">卡片列表</h2>
+          <h2 className="text-base font-semibold">阶段图例</h2>
+          <div className="mt-3 grid grid-cols-1 gap-2">
+            {stageDefinitions.map((stage) => (
+              <div className="flex items-center gap-2 text-sm text-slate-700" key={stage.id}>
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-sm"
+                  style={{ backgroundColor: stage.color }}
+                />
+                <span>{stage.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="mt-5 text-base font-semibold">卡片列表</h2>
           <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
             {cards.map((card) => (
               <a
@@ -40,8 +55,17 @@ export function App() {
                 rel="noreferrer"
                 target="_blank"
               >
-                <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
-                <span className="text-slate-900">{card.title}</span>
+                <span className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
+                    style={{ backgroundColor: stageColorById[deriveCardStage(card)] }}
+                  />
+                  <span className="min-w-0">
+                    <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
+                    <span className="text-slate-900">{card.title}</span>
+                  </span>
+                </span>
               </a>
             ))}
           </div>
@@ -50,6 +74,10 @@ export function App() {
     </main>
   );
 }
+
+const stageColorById = Object.fromEntries(
+  stageDefinitions.map((stage) => [stage.id, stage.color])
+) as Record<(typeof stageDefinitions)[number]["id"], string>;
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (

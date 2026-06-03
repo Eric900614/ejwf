@@ -1,9 +1,11 @@
 import { parseBlockedByEdges } from "./blockedBy";
+import { deriveCardStage, type CardStage } from "./stage";
 import type { Card, DependencyEdge } from "./types";
 
 export interface GraphNode {
   id: string;
   card: Card;
+  stage: CardStage;
 }
 
 export interface GraphEdge {
@@ -21,7 +23,8 @@ export interface DependencyGraph {
 export function buildDependencyGraph(cards: Card[]): DependencyGraph {
   const nodes = cards.map((card) => ({
     id: String(card.number),
-    card
+    card,
+    stage: deriveCardStage(card)
   }));
 
   const nodeIds = new Set(nodes.map((node) => node.id));

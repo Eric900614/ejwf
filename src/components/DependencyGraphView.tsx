@@ -2,6 +2,7 @@ import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
 import { useEffect, useRef } from "react";
 import type { DependencyGraph } from "../domain/graph";
+import { stageDefinitions } from "../domain/stage";
 
 cytoscape.use(dagre);
 
@@ -23,7 +24,8 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
         ...graph.nodes.map((node) => ({
           data: {
             id: node.id,
-            label: `#${node.card.number}\n${node.card.title}`
+            label: `#${node.card.number}\n${node.card.title}`,
+            stage: node.stage
           }
         })),
         ...graph.edges.map((edge) => ({
@@ -47,7 +49,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           selector: "node",
           style: {
             "background-color": "#ffffff",
-            "border-color": "#2563eb",
+            "border-color": "#94a3b8",
             "border-width": "2px",
             color: "#0f172a",
             "font-family": "Inter, ui-sans-serif, system-ui, sans-serif",
@@ -62,6 +64,14 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
             width: "180px"
           }
         },
+        ...stageDefinitions.map((stage) => ({
+          selector: `node[stage = "${stage.id}"]`,
+          style: {
+            "background-color": stage.color,
+            "border-color": stage.color,
+            color: "#ffffff"
+          }
+        })),
         {
           selector: "edge",
           style: {
