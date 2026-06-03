@@ -8,10 +8,17 @@ cytoscape.use(dagre);
 
 interface DependencyGraphViewProps {
   graph: DependencyGraph;
+  onSelectNodeId?: (nodeId: string | undefined) => void;
+  selectedNodeId?: string;
 }
 
-export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
+export function DependencyGraphView({
+  graph,
+  onSelectNodeId,
+  selectedNodeId
+}: DependencyGraphViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -38,6 +45,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
             id: node.id,
             label: `#${node.card.number}\n${node.card.title}`,
             ready: node.isReady ? "true" : "false",
+            selected: node.id === selectedNodeId ? "true" : "false",
             stage: node.stage
           }
         })),
@@ -97,6 +105,13 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           }
         },
         {
+          selector: 'node[selected = "true"]',
+          style: {
+            "border-color": "#0f172a",
+            "border-width": "6px"
+          }
+        },
+        {
           selector: "edge",
           style: {
             "curve-style": "bezier",
@@ -118,11 +133,40 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
     });
 
     cy.fit(undefined, 32);
+    cy.on("tap", "node", (event) => {
+      onSelectNodeId?.(String(event.target.id()));
+    });
+    cy.on("tap", (event) => {
+      if (event.target === cy) {
+        onSelectNodeId?.(undefined);
+      }
+    });
+
+    cyRef.current = cy;
 
     return () => {
+      cyRef.current = null;
       cy.destroy();
     };
-  }, [graph]);
+    // selectedNodeId is intentionally excluded: the initial highlight is seeded
+    // above, and the effect below syncs it without rebuilding the whole graph.
+  }, [graph, onSelectNodeId]);
+
+  // Reflect selection by mutating node data in place — rebuilding the cytoscape
+  // instance just to move the highlight would re-run dagre + cy.fit() on every
+  // tap, throwing away the user's pan/zoom and flickering.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) {
+      return;
+    }
+
+    cy.batch(() => {
+      cy.nodes().forEach((node) => {
+        node.data("selected", node.id() === selectedNodeId ? "true" : "false");
+      });
+    });
+  }, [graph, selectedNodeId]);
 
   if (graph.nodes.length === 0) {
     return (

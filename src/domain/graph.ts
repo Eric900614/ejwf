@@ -1,4 +1,5 @@
 import { parseBlockedByEdges } from "./blockedBy";
+import { parseCardRelations, type CardRelations } from "./relations";
 import { deriveCardStage, type CardStage } from "./stage";
 import type { Card, DependencyEdge } from "./types";
 
@@ -7,6 +8,7 @@ export interface GraphNode {
   card: Card;
   stage: CardStage;
   isReady: boolean;
+  relations: CardRelations;
 }
 
 export type GraphEdgeStatus = "blocking" | "satisfied";
@@ -34,7 +36,8 @@ export function buildDependencyGraph(cards: Card[]): DependencyGraph {
     id: String(card.number),
     card,
     stage: deriveCardStage(card),
-    isReady: isReadyForAgent(card, dependenciesByCardNumber.get(card.number) ?? [], cardByNumber)
+    isReady: isReadyForAgent(card, dependenciesByCardNumber.get(card.number) ?? [], cardByNumber),
+    relations: parseCardRelations(card)
   }));
 
   const nodeIds = new Set(nodes.map((node) => node.id));
