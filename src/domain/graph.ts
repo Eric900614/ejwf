@@ -24,14 +24,34 @@ export function buildDependencyGraph(cards: Card[]): DependencyGraph {
     card
   }));
 
-  const edges = cards.flatMap((card) =>
-    parseBlockedByEdges(card).map((dependency) => ({
-      id: `${dependency.blockerNumber}->${dependency.blockedNumber}`,
-      source: String(dependency.blockerNumber),
-      target: String(dependency.blockedNumber),
-      dependency
-    }))
-  );
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const seenEdgeIds = new Set<string>();
+  const edges: GraphEdge[] = [];
+
+  for (const card of cards) {
+    for (const dependency of parseBlockedByEdges(card)) {
+      const source = String(dependency.blockerNumber);
+      const target = String(dependency.blockedNumber);
+
+      // Skip edges whose blocker isn't among the rendered cards (a closed or
+      // cross-repo blocker, e.g. #2 once it closes while #3/#4/#5 still list it).
+      // cytoscape throws on an edge that points at a non-existent node, which
+      // blanks the whole graph. Surfacing dangling refs is the linter's job (#8).
+      if (!nodeIds.has(source) || !nodeIds.has(target)) {
+        continue;
+      }
+
+      // Dedupe repeated `#N` in one Blocked by section — a duplicate edge id
+      // makes cytoscape throw "second element with the same id".
+      const id = `${source}->${target}`;
+      if (seenEdgeIds.has(id)) {
+        continue;
+      }
+      seenEdgeIds.add(id);
+
+      edges.push({ id, source, target, dependency });
+    }
+  }
 
   return {
     nodes,

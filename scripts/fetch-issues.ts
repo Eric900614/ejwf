@@ -16,6 +16,10 @@ interface GhIssue {
 const repo = process.argv[2] ?? getCurrentRepo();
 const outputPath = resolve("src/data/cards.generated.ts");
 
+// `--paginate` with a `--jq` that returns an array emits one array *per page*
+// (e.g. `[...]\n[...]`), which is not parseable as a single JSON document. Emit
+// one issue object per line instead (NDJSON) so every page concatenates cleanly
+// and we can fetch *all* open cards, not just the first 100 (acceptance #2).
 const issuesJson = execFileSync(
   "gh",
   [
@@ -29,12 +33,18 @@ const issuesJson = execFileSync(
     "per_page=100",
     "--paginate",
     "--jq",
-    "map(select(.pull_request == null))",
+    ".[] | select(.pull_request == null)",
   ],
   { encoding: "utf8" }
 );
 
-const cards = (JSON.parse(issuesJson) as GhIssue[]).map<Card>((issue) => ({
+const issues = issuesJson
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line.length > 0)
+  .map((line) => JSON.parse(line) as GhIssue);
+
+const cards = issues.map<Card>((issue) => ({
   number: issue.number,
   title: issue.title,
   body: issue.body ?? "",

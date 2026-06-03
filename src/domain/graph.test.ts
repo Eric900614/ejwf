@@ -34,4 +34,38 @@ describe("buildDependencyGraph", () => {
       ]
     });
   });
+
+  it("丢弃指向不存在卡片的依赖边（前置已关闭 / 跨 repo），避免 cytoscape 崩溃", () => {
+    const cards: Card[] = [
+      {
+        number: 5,
+        title: "仍挂着已关闭前置的卡",
+        state: "OPEN",
+        body: "## Blocked by\n\n- #2"
+      }
+    ];
+
+    expect(buildDependencyGraph(cards).edges).toEqual([]);
+  });
+
+  it("同一段里重复引用同一前置时只生成一条边", () => {
+    const cards: Card[] = [
+      { number: 2, title: "前置", state: "OPEN", body: "" },
+      {
+        number: 5,
+        title: "重复引用前置的卡",
+        state: "OPEN",
+        body: "## Blocked by\n\n- #2\n- 另见 #2"
+      }
+    ];
+
+    expect(buildDependencyGraph(cards).edges).toEqual([
+      {
+        id: "2->5",
+        source: "2",
+        target: "5",
+        dependency: { blockerNumber: 2, blockedNumber: 5 }
+      }
+    ]);
+  });
 });
