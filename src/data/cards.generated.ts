@@ -1,7 +1,7 @@
 import type { Card } from "../domain/types";
 
 export const sourceRepo = "Eric900614/ejwf";
-export const fetchedAt = "2026-06-03T13:02:45.340Z";
+export const fetchedAt = "2026-06-03T13:24:37.861Z";
 export const cards: Card[] = [
   {
     "number": 8,
@@ -13,7 +13,8 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   },
   {
     "number": 7,
@@ -25,7 +26,8 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   },
   {
     "number": 6,
@@ -37,7 +39,8 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   },
   {
     "number": 5,
@@ -49,7 +52,8 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   },
   {
     "number": 4,
@@ -61,7 +65,8 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   },
   {
     "number": 3,
@@ -73,20 +78,12 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
-  },
-  {
-    "number": 2,
-    "title": "TB1-1 (needs-triage): 项目骨架 + 最薄一条龙 — open issues→解析 Blocked by→画出依赖图",
-    "body": "## Parent\n\n#1 — PRD: Agents 团队驾驶舱 — TB1：单 repo 只读依赖 DAG\n\n## What to build\n\n驾驶舱的第一条 tracer：给定单个 repo，拉取它的 open **卡片**（issue），解析每张卡正文里的 `## Blocked by` 段得到**依赖边**，在屏幕上渲染成一张**有向图**——节点＝卡片，箭头＝blocked-by（前置→被挡）。\n\n这一刀刻意只走最薄路径：**不上色、不算就绪、不连 PRD/ADR、不做 linter**，只证明「拉数据 → 解析 → 建图 → 画出来」端到端跑得通。\n\n同时确立两条全局基线：\n- **技术栈与技术路线**：本地 app + 一个成熟的 DAG 渲染库（PRD 倾向，不锁）。**本卡为 needs-triage：先与维护者一起决策定栈、定路线，再转 ready-for-agent 放给 AFK agent。**\n- **测试风格基线**：纯逻辑模块用「输入 → 断言输出」的行为测试；ejwf 当前为空 repo，本卡立下范式。\n\n只读，不写回 GitHub（ADR-0001 / ADR-0002）。原型 `prototype-dag/` 已验证此路径可行；正式实现按 `prototype-dag/NOTES.md` 的教训重写，**不直接提升原型代码**。\n\n## Acceptance criteria\n\n- [ ] 技术栈与技术路线经与维护者决策确定，并简短记录（README 或新 ADR）\n- [ ] 给定一个 repo，能拉到它全部 open 卡片，至少含 number / 标题 / 正文\n- [ ] 关系解析器能从卡片正文的 `## Blocked by` 段解析出 blocked-by 依赖边；**必须覆盖「`## Blocked by` 是正文最末段」这一情形**（原型曾因 JS 不支持 `\\Z` 而漏解析，见 NOTES.md）\n- [ ] 屏幕上渲染出「节点 + blocked-by 箭头」的有向图，跑起来肉眼可见\n- [ ] 全程只读，未对 GitHub 产生任何写操作\n- [ ] 关系解析器带「输入 → 输出」行为单测，确立测试风格基线\n\n## Blocked by\n\nNone - 可立即开始（但需先完成 needs-triage 的定栈/定路线决策，再转 AFK）",
-    "state": "OPEN",
-    "url": "https://github.com/Eric900614/ejwf/issues/2",
-    "labels": [
+    ],
+    "associatedPullRequests": [
       {
-        "name": "enhancement"
-      },
-      {
-        "name": "ready-for-agent"
+        "number": 12,
+        "state": "OPEN",
+        "url": "https://github.com/Eric900614/ejwf/pull/12"
       }
     ]
   },
@@ -100,6 +97,7 @@ export const cards: Card[] = [
       {
         "name": "ready-for-agent"
       }
-    ]
+    ],
+    "associatedPullRequests": []
   }
 ];

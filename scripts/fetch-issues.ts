@@ -6,51 +6,63 @@ import type { Card } from "../src/domain/types";
 interface GhIssue {
   number: number;
   title: string;
-  body?: string;
-  state: "open" | "closed";
-  html_url?: string;
+  body: string;
+  state: "OPEN" | "CLOSED";
+  url?: string;
   labels?: Array<{ name: string }>;
-  pull_request?: unknown;
+  closedByPullRequestsReferences?: GhPullRequestReference[];
+}
+
+interface GhPullRequestReference {
+  number: number;
+  url: string;
+}
+
+interface GhPullRequest {
+  number: number;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  url?: string;
 }
 
 const repo = process.argv[2] ?? getCurrentRepo();
 const outputPath = resolve("src/data/cards.generated.ts");
 
-// `--paginate` with a `--jq` that returns an array emits one array *per page*
-// (e.g. `[...]\n[...]`), which is not parseable as a single JSON document. Emit
-// one issue object per line instead (NDJSON) so every page concatenates cleanly
-// and we can fetch *all* open cards, not just the first 100 (acceptance #2).
 const issuesJson = execFileSync(
   "gh",
   [
-    "api",
-    "--method",
-    "GET",
-    `repos/${repo}/issues`,
-    "-f",
-    "state=open",
-    "-f",
-    "per_page=100",
-    "--paginate",
-    "--jq",
-    ".[] | select(.pull_request == null)",
+    "issue",
+    "list",
+    "--repo",
+    repo,
+    "--state",
+    "open",
+    "--limit",
+    "1000",
+    "--json",
+    "number,title,body,state,url,labels,closedByPullRequestsReferences"
   ],
   { encoding: "utf8" }
 );
 
-const issues = issuesJson
-  .split("\n")
-  .map((line) => line.trim())
-  .filter((line) => line.length > 0)
-  .map((line) => JSON.parse(line) as GhIssue);
+const issues = JSON.parse(issuesJson) as GhIssue[];
+const pullRequestsByUrl = fetchPullRequestsByUrl(
+  unique(
+    issues.flatMap((issue) =>
+      (issue.closedByPullRequestsReferences ?? []).map((pullRequest) => pullRequest.url)
+    )
+  )
+);
 
 const cards = issues.map<Card>((issue) => ({
   number: issue.number,
   title: issue.title,
   body: issue.body ?? "",
-  state: issue.state.toUpperCase() as Card["state"],
-  url: issue.html_url,
-  labels: issue.labels?.map((label) => ({ name: label.name })) ?? []
+  state: issue.state,
+  url: issue.url,
+  labels: issue.labels?.map((label) => ({ name: label.name })) ?? [],
+  associatedPullRequests: (issue.closedByPullRequestsReferences ?? [])
+    .map((pullRequest) => pullRequestsByUrl.get(pullRequest.url))
+    .filter((pullRequest): pullRequest is GhPullRequest => pullRequest !== undefined)
 }));
 
 mkdirSync(dirname(outputPath), { recursive: true });
@@ -74,4 +86,26 @@ function getCurrentRepo(): string {
   return execFileSync("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], {
     encoding: "utf8"
   }).trim();
+}
+
+function fetchPullRequestsByUrl(urls: string[]): Map<string, GhPullRequest> {
+  const pullRequestsByUrl = new Map<string, GhPullRequest>();
+
+  for (const url of urls) {
+    const pullRequest = JSON.parse(
+      execFileSync("gh", ["pr", "view", url, "--json", "number,state,url"], {
+        encoding: "utf8"
+      })
+    ) as GhPullRequest;
+
+    if (pullRequest.url) {
+      pullRequestsByUrl.set(pullRequest.url, pullRequest);
+    }
+  }
+
+  return pullRequestsByUrl;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }

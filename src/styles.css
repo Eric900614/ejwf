@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-@theme {
+/* `static` forces Tailwind to always emit these custom properties to :root,
+   even though no utility class references them — the graph (cytoscape, via
+   getComputedStyle) and the UI both read them as the single source of stage
+   colors (ADR-0004). Without `static` they get tree-shaken out of the build. */
+@theme static {
   --color-stage-triage: #f59e0b;
   --color-stage-ready: #2563eb;
   --color-stage-review: #7c3aed;
