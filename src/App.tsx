@@ -1,13 +1,22 @@
+import { useState } from "react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
-import { buildDependencyGraph } from "./domain/graph";
+import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
-import { cards, fetchedAt, sourceRepo } from "./data/cards.generated";
+import { adrDocuments, cards, fetchedAt, sourceRepo } from "./data/cards.generated";
+import type { ResolvedAdrReference } from "./domain/adr";
 
 const graph = buildDependencyGraph(cards);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
+const cardByNumber = new Map(cards.map((card) => [card.number, card]));
+const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
+const defaultSelectedNodeId =
+  graph.nodes.find((node) => node.relations.adrReferences.length > 0)?.id ?? graph.nodes[0]?.id;
 const fetchedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString("zh-CN") : "尚未拉取";
 
 export function App() {
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(defaultSelectedNodeId);
+  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId);
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <section className="border-b border-slate-200 bg-white">
@@ -30,9 +39,19 @@ export function App() {
 
       <section className="mx-auto grid max-w-7xl gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-h-[560px] overflow-hidden rounded border border-slate-200 bg-white">
-          <DependencyGraphView graph={graph} />
+          <DependencyGraphView
+            graph={graph}
+            onSelectNodeId={setSelectedNodeId}
+            selectedNodeId={selectedNodeId}
+          />
         </div>
         <aside className="rounded border border-slate-200 bg-white p-4">
+          <NodeDetails
+            adrDocumentByCode={adrDocumentByCode}
+            node={selectedNode}
+            sourceRepo={sourceRepo}
+          />
+
           <h2 className="text-base font-semibold">阶段图例</h2>
           <div className="mt-3 grid grid-cols-1 gap-2">
             {stageDefinitions.map((stage) => (
@@ -111,6 +130,114 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded border border-slate-200 bg-slate-50 px-3 py-2">
       <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="truncate text-sm font-medium text-slate-900">{value}</dd>
+    </div>
+  );
+}
+
+function NodeDetails({
+  adrDocumentByCode,
+  node,
+  sourceRepo
+}: {
+  adrDocumentByCode: Map<string, ResolvedAdrReference>;
+  node?: GraphNode;
+  sourceRepo: string;
+}) {
+  if (!node) {
+    return (
+      <section className="mb-5 border-b border-slate-200 pb-5">
+        <h2 className="text-base font-semibold">节点详情</h2>
+        <p className="mt-2 text-sm text-slate-500">未选中节点</p>
+      </section>
+    );
+  }
+
+  const labels = node.card.labels?.map((label) => label.name) ?? [];
+  const pullRequests = node.card.associatedPullRequests ?? [];
+  const parentPrd = node.relations.parentPrd;
+  const parentCard = parentPrd ? cardByNumber.get(parentPrd.parentNumber) : undefined;
+  const parentUrl =
+    parentCard?.url ?? (parentPrd ? `https://github.com/${sourceRepo}/issues/${parentPrd.parentNumber}` : undefined);
+
+  return (
+    <section className="mb-5 border-b border-slate-200 pb-5">
+      <h2 className="text-base font-semibold">节点详情</h2>
+      <div className="mt-3 space-y-3 text-sm text-slate-700">
+        <div>
+          <p className="font-semibold text-slate-900">
+            #{node.card.number} {node.card.title}
+          </p>
+          {node.isReady ? <p className="mt-1 font-medium text-yellow-700">就绪</p> : null}
+        </div>
+
+        <DetailRow label="标签" value={labels.length > 0 ? labels.join(" / ") : "无"} />
+        <DetailRow
+          label="关联 PR"
+          value={
+            pullRequests.length > 0
+              ? pullRequests.map((pullRequest) => `#${pullRequest.number} ${pullRequest.state}`).join(" / ")
+              : "无"
+          }
+        />
+
+        <div>
+          <p className="text-xs font-medium uppercase text-slate-500">归属 PRD</p>
+          {parentPrd && parentUrl ? (
+            <a
+              className="mt-1 inline-block text-sky-700 hover:text-sky-900"
+              href={parentUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              #{parentPrd.parentNumber} {parentPrd.title ?? parentCard?.title ?? "PRD"}
+            </a>
+          ) : (
+            <p className="mt-1 text-slate-500">无</p>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase text-slate-500">引用 ADR</p>
+          {node.relations.adrReferences.length > 0 ? (
+            <ul className="mt-1 space-y-1">
+              {node.relations.adrReferences.map((reference) => {
+                const document = adrDocumentByCode.get(reference.code);
+
+                return (
+                  <li key={reference.code}>
+                    {document?.url ? (
+                      <a
+                        className="text-sky-700 hover:text-sky-900"
+                        href={document.url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {reference.code} — {document.title}
+                      </a>
+                    ) : (
+                      <span>
+                        {reference.code}
+                        {document?.title ? ` — ${document.title}` : ""}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-1 text-slate-500">无</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
+      <p className="mt-1 text-slate-700">{value}</p>
     </div>
   );
 }

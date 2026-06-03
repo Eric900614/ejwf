@@ -3,6 +3,30 @@ import { buildDependencyGraph, findMissingBlockerNumbers } from "./graph";
 import type { Card } from "./types";
 
 describe("buildDependencyGraph", () => {
+  it("把每张卡的 PRD 归属和 ADR 引用挂到节点上", () => {
+    const cards: Card[] = [
+      {
+        number: 5,
+        title: "为什么链",
+        state: "OPEN",
+        body: "## Parent\n\n#1 — PRD: Agents 团队驾驶舱\n\n## Notes\n\n见 ADR-0002",
+        labels: [{ name: "ready-for-agent" }]
+      }
+    ];
+
+    expect(buildDependencyGraph(cards).nodes[0]).toMatchObject({
+      id: "5",
+      relations: {
+        parentPrd: {
+          childNumber: 5,
+          parentNumber: 1,
+          title: "PRD: Agents 团队驾驶舱"
+        },
+        adrReferences: [{ cardNumber: 5, code: "ADR-0002", number: "0002" }]
+      }
+    });
+  });
+
   it("把 blocked-by 解析成前置指向被挡卡片的箭头", () => {
     const cards: Card[] = [
       {
@@ -23,8 +47,20 @@ describe("buildDependencyGraph", () => {
 
     expect(buildDependencyGraph(cards)).toEqual({
       nodes: [
-        { id: "2", card: cards[0], stage: "ready", isReady: true },
-        { id: "5", card: cards[1], stage: "ready", isReady: false }
+        {
+          id: "2",
+          card: cards[0],
+          stage: "ready",
+          isReady: true,
+          relations: { parentPrd: undefined, adrReferences: [] }
+        },
+        {
+          id: "5",
+          card: cards[1],
+          stage: "ready",
+          isReady: false,
+          relations: { parentPrd: undefined, adrReferences: [] }
+        }
       ],
       edges: [
         {
@@ -58,8 +94,20 @@ describe("buildDependencyGraph", () => {
 
     expect(buildDependencyGraph(cards)).toEqual({
       nodes: [
-        { id: "2", card: cards[0], stage: "done", isReady: false },
-        { id: "4", card: cards[1], stage: "ready", isReady: true }
+        {
+          id: "2",
+          card: cards[0],
+          stage: "done",
+          isReady: false,
+          relations: { parentPrd: undefined, adrReferences: [] }
+        },
+        {
+          id: "4",
+          card: cards[1],
+          stage: "ready",
+          isReady: true,
+          relations: { parentPrd: undefined, adrReferences: [] }
+        }
       ],
       edges: [
         {

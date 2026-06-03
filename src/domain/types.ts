@@ -24,3 +24,15 @@ export interface DependencyEdge {
   blockerNumber: number;
   blockedNumber: number;
 }
+
+export interface ParentPrdEdge {
+  parentNumber: number;
+  childNumber: number;
+  title?: string;
+}
+
+export interface AdrReferenceEdge {
+  cardNumber: number;
+  code: string;
+  number: string;
+}
