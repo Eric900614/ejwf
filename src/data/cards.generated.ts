@@ -1,7 +1,7 @@
 import type { Card } from "../domain/types";
 
 export const sourceRepo = "Eric900614/ejwf";
-export const fetchedAt = "2026-06-03T13:21:48.796Z";
+export const fetchedAt = "2026-06-03T13:24:37.861Z";
 export const cards: Card[] = [
   {
     "number": 8,
@@ -79,7 +79,13 @@ export const cards: Card[] = [
         "name": "ready-for-agent"
       }
     ],
-    "associatedPullRequests": []
+    "associatedPullRequests": [
+      {
+        "number": 12,
+        "state": "OPEN",
+        "url": "https://github.com/Eric900614/ejwf/pull/12"
+      }
+    ]
   },
   {
     "number": 1,
