@@ -10,6 +10,13 @@
   --color-stage-review: #7c3aed;
   --color-stage-acceptance: #db2777;
   --color-stage-done: #16a34a;
+
+  /* Readiness / dependency-edge semantics (ADR-0004: 金圈=就绪可派,
+     绿=依赖已就位/已满足, 仍被挡=默认边色). Single source for both the graph
+     (cytoscape) and the UI legend. */
+  --color-ready: #facc15;
+  --color-dep-satisfied: #16a34a;
+  --color-dep-blocking: #64748b;
 }
 
 html,

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { findMissingBlockerNumbers } from "../src/domain/graph";
 import type { Card } from "../src/domain/types";
 
 interface GhIssue {
@@ -44,7 +45,11 @@ const issuesJson = execFileSync(
   { encoding: "utf8" }
 );
 
-const issues = JSON.parse(issuesJson) as GhIssue[];
+const openIssues = JSON.parse(issuesJson) as GhIssue[];
+const missingBlockerIssues = findMissingBlockerNumbers(openIssues.map(toCard))
+  .map((number) => fetchIssue(number))
+  .filter((issue): issue is GhIssue => issue !== undefined);
+const issues = [...openIssues, ...missingBlockerIssues];
 const pullRequestsByUrl = fetchPullRequestsByUrl(
   unique(
     issues.flatMap((issue) =>
@@ -53,17 +58,7 @@ const pullRequestsByUrl = fetchPullRequestsByUrl(
   )
 );
 
-const cards = issues.map<Card>((issue) => ({
-  number: issue.number,
-  title: issue.title,
-  body: issue.body ?? "",
-  state: issue.state,
-  url: issue.url,
-  labels: issue.labels?.map((label) => ({ name: label.name })) ?? [],
-  associatedPullRequests: (issue.closedByPullRequestsReferences ?? [])
-    .map((pullRequest) => pullRequestsByUrl.get(pullRequest.url))
-    .filter((pullRequest): pullRequest is GhPullRequest => pullRequest !== undefined)
-}));
+const cards = issues.map(toCardWithPullRequests);
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(
@@ -79,8 +74,28 @@ writeFileSync(
   "utf8"
 );
 
-console.log(`Fetched ${cards.length} open cards from ${repo}`);
+console.log(`Fetched ${openIssues.length} open cards and ${missingBlockerIssues.length} missing blockers from ${repo}`);
 console.log(`Wrote ${outputPath}`);
+
+function toCard(issue: GhIssue): Card {
+  return {
+    number: issue.number,
+    title: issue.title,
+    body: issue.body ?? "",
+    state: issue.state,
+    url: issue.url,
+    labels: issue.labels?.map((label) => ({ name: label.name })) ?? []
+  };
+}
+
+function toCardWithPullRequests(issue: GhIssue): Card {
+  return {
+    ...toCard(issue),
+    associatedPullRequests: (issue.closedByPullRequestsReferences ?? [])
+      .map((pullRequest) => pullRequestsByUrl.get(pullRequest.url))
+      .filter((pullRequest): pullRequest is GhPullRequest => pullRequest !== undefined)
+  };
+}
 
 function getCurrentRepo(): string {
   return execFileSync("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], {
@@ -108,4 +123,26 @@ function fetchPullRequestsByUrl(urls: string[]): Map<string, GhPullRequest> {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function fetchIssue(number: number): GhIssue | undefined {
+  try {
+    return JSON.parse(
+      execFileSync(
+        "gh",
+        [
+          "issue",
+          "view",
+          String(number),
+          "--repo",
+          repo,
+          "--json",
+          "number,title,body,state,url,labels,closedByPullRequestsReferences"
+        ],
+        { encoding: "utf8" }
+      )
+    ) as GhIssue;
+  } catch {
+    return undefined;
+  }
 }

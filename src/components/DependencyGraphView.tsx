@@ -22,8 +22,13 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
     // stage design tokens to concrete colors from the same single source the UI
     // uses (src/styles.css `@theme`, ADR-0004).
     const rootStyles = getComputedStyle(document.documentElement);
+    const cssVar = (name: string, fallback: string) =>
+      rootStyles.getPropertyValue(name).trim() || fallback;
     const stageColor = (stage: (typeof stageDefinitions)[number]) =>
-      rootStyles.getPropertyValue(`--color-stage-${stage.id}`).trim() || stage.color;
+      cssVar(`--color-stage-${stage.id}`, stage.color);
+    const readyColor = cssVar("--color-ready", "#facc15");
+    const satisfiedColor = cssVar("--color-dep-satisfied", "#16a34a");
+    const blockingColor = cssVar("--color-dep-blocking", "#64748b");
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -32,6 +37,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           data: {
             id: node.id,
             label: `#${node.card.number}\n${node.card.title}`,
+            ready: node.isReady ? "true" : "false",
             stage: node.stage
           }
         })),
@@ -39,6 +45,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           data: {
             id: edge.id,
             source: edge.source,
+            status: edge.status,
             target: edge.target
           }
         }))
@@ -83,13 +90,28 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           };
         }),
         {
+          selector: 'node[ready = "true"]',
+          style: {
+            "border-color": readyColor,
+            "border-width": "5px"
+          }
+        },
+        {
           selector: "edge",
           style: {
             "curve-style": "bezier",
-            "line-color": "#64748b",
-            "target-arrow-color": "#64748b",
+            "line-color": blockingColor,
+            "target-arrow-color": blockingColor,
             "target-arrow-shape": "triangle",
             width: "2px"
+          }
+        },
+        {
+          selector: 'edge[status = "satisfied"]',
+          style: {
+            "line-color": satisfiedColor,
+            "line-style": "dashed",
+            "target-arrow-color": satisfiedColor
           }
         }
       ]
@@ -110,5 +132,5 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
     );
   }
 
-  return <div aria-label="Open 卡片依赖图" className="h-full min-h-[560px]" ref={containerRef} />;
+  return <div aria-label="卡片依赖图" className="h-full min-h-[560px]" ref={containerRef} />;
 }
