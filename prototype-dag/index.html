@@ -1,0 +1,395 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. 一次性、只读。用完即删（或把结论折回真代码）。
+  唯一要回答的真未知（PRD #1, User Story 16）：真实 foravia 数据画成依赖 DAG，
+  到底清爽好用、还是糊成一团面条？
+
+  三版「不同画法」从底部切换条切换（也可 ← → 方向键 / URL ?variant=A|B|C）：
+    A — 分层全景：dagre 自顶向下，全部节点 + 全部边。最诚实的「会不会面条」基线。
+    B — 按 PRD 分组：同一 PRD 的卡圈进一个框，看分组能不能把图理清。
+    C — 就绪聚焦：只留「就绪」卡 + 它们的直接依赖邻居，看「现在能干啥」会不会更清爽。
+
+  数据来自 data.js（由 fetch-data.mjs 拉真实 GitHub 数据生成）。画图库在 lib/（本地，不碰网络）。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>驾驶舱 TB1 原型 — 依赖 DAG（一次性）</title>
+  <script src="lib/cytoscape.min.js"></script>
+  <script src="lib/dagre.min.js"></script>
+  <script src="lib/cytoscape-dagre.js"></script>
+  <script src="data.js"></script>  <!-- 真实数据（fetch-data.mjs 生成）—— 必须在主脚本之前加载 -->
+  <style>
+    :root { --bg:#0f1419; --panel:#1a2029; --line:#2a323d; --text:#e6edf3; --dim:#8b98a5; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; overflow:hidden; }
+    #cy { position:absolute; inset:0; }
+
+    /* 左上：图例 + 统计 */
+    #legend { position:absolute; top:12px; left:12px; z-index:10; background:rgba(26,32,41,.92);
+      border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:12.5px; max-width:280px; }
+    #legend h3 { margin:0 0 8px; font-size:13px; }
+    .lg-row { display:flex; align-items:center; gap:8px; margin:4px 0; }
+    .sw { width:14px; height:14px; border-radius:4px; flex:none; }
+    .lg-note { color:var(--dim); margin-top:8px; line-height:1.5; }
+    .ready-sw { width:14px; height:14px; border-radius:4px; background:#2b3340; border:2.5px solid #ffd400; box-shadow:0 0 6px #ffd400; }
+
+    /* 右上：本次抓取统计 */
+    #stats { position:absolute; top:12px; right:12px; z-index:10; background:rgba(26,32,41,.92);
+      border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:12px; color:var(--dim); text-align:right; }
+    #stats b { color:var(--text); }
+
+    /* 右侧：节点详情面板 */
+    #panel { position:absolute; top:0; right:0; height:100%; width:380px; z-index:20; background:var(--panel);
+      border-left:1px solid var(--line); padding:18px; overflow:auto; transform:translateX(100%); transition:transform .18s; }
+    #panel.open { transform:none; }
+    #panel h2 { margin:0 0 4px; font-size:16px; }
+    #panel .num { color:var(--dim); font-size:13px; }
+    #panel .field { margin:14px 0; }
+    #panel .field .k { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; }
+    #panel .chip { display:inline-block; background:#283041; border:1px solid var(--line); border-radius:20px;
+      padding:2px 10px; font-size:12px; margin:2px 4px 2px 0; }
+    #panel a { color:#58a6ff; }
+    #panel .close { position:absolute; top:12px; right:14px; cursor:pointer; color:var(--dim); font-size:20px; border:none; background:none; }
+    .ready-badge { display:inline-block; background:#ffd400; color:#222; font-weight:700; border-radius:6px; padding:2px 8px; font-size:12px; }
+
+    /* 左下：linter 面板 */
+    #linter { position:absolute; bottom:74px; left:12px; z-index:10; background:rgba(26,32,41,.92);
+      border:1px solid #5a3a1a; border-radius:10px; padding:10px 14px; font-size:12px; max-width:340px; }
+    #linter h3 { margin:0 0 6px; font-size:12.5px; color:#e3a857; }
+    #linter ul { margin:0; padding-left:18px; line-height:1.5; }
+
+    /* 底部居中：切换条 */
+    #switcher { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:30;
+      display:flex; align-items:center; gap:14px; background:#e6edf3; color:#0f1419;
+      border-radius:999px; padding:8px 14px; box-shadow:0 6px 24px rgba(0,0,0,.5); font-weight:600; }
+    #switcher button { border:none; background:#0f1419; color:#fff; width:30px; height:30px; border-radius:50%;
+      cursor:pointer; font-size:15px; }
+    #switcher .label { min-width:200px; text-align:center; font-size:13.5px; }
+    #switcher .hint { font-size:11px; color:#5b6570; font-weight:400; }
+    .fitbtn { position:absolute; bottom:20px; right:16px; z-index:10; background:#283041; color:#fff;
+      border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:12.5px; }
+    /* 已关闭卡开关 */
+    .toggle { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); display:flex; align-items:center; gap:8px; cursor:pointer; }
+    .toggle input { width:15px; height:15px; cursor:pointer; }
+
+    /* C 版：就绪看板（HTML，非图） */
+    #board { position:absolute; inset:0; display:none; padding:84px 16px 80px; gap:14px; overflow:auto; }
+    #board.show { display:flex; }
+    .col { flex:1 1 0; min-width:230px; background:rgba(26,32,41,.55); border:1px solid var(--line);
+      border-radius:12px; padding:10px; display:flex; flex-direction:column; }
+    .col h3 { margin:2px 4px 10px; font-size:13.5px; display:flex; align-items:center; gap:8px; position:sticky; top:0; }
+    .col h3 .cnt { color:var(--dim); font-weight:400; font-size:12px; }
+    .col .cards { overflow:auto; display:flex; flex-direction:column; gap:8px; }
+    .bcard { background:#1f2632; border:1px solid var(--line); border-left:4px solid #555; border-radius:9px;
+      padding:9px 11px; cursor:pointer; transition:transform .08s; }
+    .bcard:hover { transform:translateY(-1px); border-color:#5b6878; }
+    .bcard.ready { border-left-color:#ffd400; box-shadow:0 0 0 1px rgba(255,212,0,.35); }
+    .bcard .bnum { font-weight:700; font-size:12.5px; }
+    .bcard .btitle { font-size:12px; color:var(--text); margin:3px 0 6px; line-height:1.35; }
+    .bcard .bmeta { font-size:11px; color:var(--dim); display:flex; flex-wrap:wrap; gap:6px; }
+    .bcard .blk-open { color:#e8696b; } .bcard .blk-done { color:#3fb950; } .bcard .prd-tag { color:#58a6ff; }
+    .col-empty { color:var(--dim); font-size:12px; padding:8px 4px; }
+  </style>
+</head>
+<body>
+  <div id="cy"></div>
+  <div id="board"></div>
+
+  <div id="legend">
+    <h3>阶段配色（5 桶，全自动派生）</h3>
+    <div class="lg-row"><span class="sw" style="background:#7d8896"></span>待打理 (needs-triage/info)</div>
+    <div class="lg-row"><span class="sw" style="background:#388bfd"></span>待开发 (ready-for-agent/human)</div>
+    <div class="lg-row"><span class="sw" style="background:#a371f7"></span>开发审查中 (有 open PR)</div>
+    <div class="lg-row"><span class="sw" style="background:#db8a34"></span>待我验收 (最弱兜底桶)</div>
+    <div class="lg-row"><span class="sw" style="background:#2ea043"></span>完成 (issue 已关)</div>
+    <div class="lg-row"><span class="ready-sw"></span><b>就绪</b>＝可马上放给 agent</div>
+    <div class="lg-row"><span class="sw" style="background:#2b3340;border:2.5px solid #3fb950"></span>依赖已就位（前置都做完，但非 agent 就绪）</div>
+    <div class="lg-note">实线箭头＝Blocked by（前置→被挡，前置在上）<br>
+      <b>没箭头≠没依赖</b>：多半是前置都已完成（已关、默认隐藏）→ 勾下面看完整血脉<br>
+      点任意节点看详情</div>
+    <label class="toggle"><input type="checkbox" id="show-closed" onchange="toggleClosed(this.checked)">显示已关闭卡（灰色背景）</label>
+  </div>
+
+  <div id="stats"></div>
+  <div id="linter"></div>
+
+  <div id="panel">
+    <button class="close" onclick="closePanel()">×</button>
+    <div id="panel-body"></div>
+  </div>
+
+  <button class="fitbtn" onclick="CY && CY.fit(undefined,40)">适配视图</button>
+
+  <div id="switcher">
+    <button onclick="cycle(-1)" title="上一版 (←)">‹</button>
+    <div>
+      <div class="label" id="sw-label">A</div>
+      <div class="hint">← / → 切换 · 一次性原型</div>
+    </div>
+    <button onclick="cycle(1)" title="下一版 (→)">›</button>
+  </div>
+
+<script>
+const D = window.COCKPIT_DATA;
+const REPO = D.repo;
+const STAGE_COLOR = {
+  triage:"#7d8896", todo:"#388bfd", "in-review":"#a371f7",
+  accept:"#db8a34", done:"#2ea043", missing:"#da3633",
+};
+const STAGE_NAME = {
+  triage:"待打理", todo:"待开发", "in-review":"开发审查中",
+  accept:"待我验收", done:"完成", missing:"悬空引用",
+};
+const VARIANTS = {
+  A: "A — 依赖图（默认只看 open）",
+  B: "B — 按 PRD 分组（open 全进泳道）",
+};
+let showClosed = false;
+function toggleClosed(v){ showClosed = v; render(currentVariant); }
+// 该节点是否「已关闭」（用来按开关过滤 / 淡化）
+const isClosed = n => n.state === "CLOSED";
+const nodeById = new Map(D.nodes.map(n => [n.id, n]));
+
+// ---- 统计条 ----
+const c = D.counts;
+document.getElementById("stats").innerHTML =
+  `<b>${REPO.split("/")[1]}</b><br>` +
+  `<b>${c.openIssues}</b> 张 open（默认只显示这些；全量含已关共 ${c.nodes} 节点 / ${c.edges} 边）<br>` +
+  `<b style="color:#ffd400">${c.ready}</b> 张就绪 · linter <b>${D.linter.length}</b> 条<br>` +
+  `<span style="font-size:11px">抓取于 ${D.fetchedAt.slice(0,16).replace("T"," ")}（重跑 fetch-data.mjs 刷新）</span>`;
+
+// ---- linter 面板 ----
+if (D.linter.length) {
+  document.getElementById("linter").innerHTML =
+    `<h3>⚠ linter：格式跑偏 / 连不上线（${D.linter.length}）</h3><ul>` +
+    D.linter.map(l => `<li>#${l.number}：${l.warnings.join("；")}</li>`).join("") + `</ul>`;
+} else {
+  document.getElementById("linter").style.display = "none";
+}
+
+// ---- 公共样式 ----
+const baseStyle = [
+  { selector:"node", style:{
+      "background-color": ele => STAGE_COLOR[ele.data("stage")] || "#555",
+      "label": ele => "#" + ele.data("number"),
+      "color":"#fff", "font-size":"13px", "font-weight":700,
+      "text-valign":"center", "text-halign":"center",
+      "width":40, "height":40, "border-width":0,
+      "text-outline-width":2, "text-outline-color": ele => STAGE_COLOR[ele.data("stage")] || "#555",
+  }},
+  { selector:"node.depsdone", style:{  // 依赖已就位（前置都做完）但未标 ready-for-agent：绿圈
+      "border-width":3, "border-color":"#3fb950",
+  }},
+  { selector:"node[?ready]", style:{   // 就绪：金边 + 发光 + 略大
+      "border-width":4, "border-color":"#ffd400", "width":48, "height":48,
+      "shadow-blur":18, "shadow-color":"#ffd400", "shadow-opacity":0.9, "shadow-offset-x":0, "shadow-offset-y":0,
+  }},
+  { selector:":parent", style:{   // PRD 分组容器
+      "background-opacity":0.06, "background-color":"#58a6ff", "border-color":"#3a4754", "border-width":1,
+      "label":"data(label)", "color":"#9fb4c8", "font-size":"13px", "font-weight":700,
+      "text-valign":"top", "text-halign":"center", "padding":18, "shape":"round-rectangle",
+  }},
+  { selector:"edge", style:{
+      "width":1.6, "line-color":"#4a5563", "target-arrow-color":"#4a5563",
+      "target-arrow-shape":"triangle", "curve-style":"bezier", "arrow-scale":0.9,
+  }},
+  { selector:"edge[type='prd']", style:{
+      "line-style":"dashed", "line-color":"#3a4a5e", "target-arrow-color":"#3a4a5e", "width":1.2,
+  }},
+  { selector:".dim", style:{ "opacity":0.12 } },
+  { selector:".faded", style:{ "opacity":0.4 } },
+];
+
+let CY = null;
+
+function baseElements() {
+  const nodes = D.nodes.map(n => ({ data:{ ...n } }));
+  const edges = D.edges.map((e,i) => ({ data:{ id:"e"+i, ...e } }));
+  return { nodes, edges };
+}
+
+// 还有几个「未满足」的前置（blocker 未关 / 查无此卡都算未满足）
+function openBlockerCount(n) {
+  return (n.blockedBy||[]).filter(b => {
+    const bn = nodeById.get(String(b));
+    return !bn || bn.state !== "CLOSED";
+  }).length;
+}
+
+function render(variant) {
+  const cyDiv = document.getElementById("cy");
+  const board = document.getElementById("board");
+  if (CY) { CY.destroy(); CY = null; }
+
+  // 看板视图（C）下，藏掉会压住列的图例/linter/适配按钮
+  const inBoard = variant === "C";
+  document.getElementById("legend").style.display = inBoard ? "none" : "";
+  if (D.linter.length) document.getElementById("linter").style.display = inBoard ? "none" : "";
+  document.querySelector(".fitbtn").style.display = inBoard ? "none" : "";
+
+  if (variant === "C") {            // C — 就绪看板：HTML，不画图
+    cyDiv.style.display = "none";
+    board.classList.add("show");
+    renderBoard();
+    return;
+  }
+  cyDiv.style.display = "block";
+  board.classList.remove("show");
+
+  // 默认只显示 open；开关打开则把 closed 也带上，淡化成背景
+  const visible = new Set(D.nodes.filter(n => showClosed || !isClosed(n)).map(n => n.id));
+  const nodes = D.nodes.filter(n => visible.has(n.id)).map(n => {
+    const cls = [];
+    if (isClosed(n)) cls.push("faded");
+    // 前置都已做完（有过 blocker、现在一个未关的都没有），但没标 ready-for-agent → 绿圈
+    else if (!n.ready && (n.blockedBy||[]).length > 0 && openBlockerCount(n) === 0) cls.push("depsdone");
+    return { data:{ ...n }, classes: cls.join(" ") };
+  });
+  const edges = D.edges
+    .filter(e => visible.has(e.source) && visible.has(e.target))
+    .map((e,i) => ({ data:{ id:"e"+i, ...e } }));
+
+  let els, layout, style = baseStyle;
+  if (variant === "B") {
+    // 每张可见卡都进一个 PRD 泳道：本身是 PRD 的卡进自己的框，有归属的进父框，其余进「散卡」
+    const prdSet = new Set(D.nodes.filter(n => n.prd != null).map(n => String(n.prd)));
+    const used = new Set();
+    const memberNodes = nodes.map(o => {
+      const d = { ...o.data }; let g;
+      if (prdSet.has(d.id)) g = "grp-" + d.id;
+      else if (d.prd != null && prdSet.has(String(d.prd))) g = "grp-" + d.prd;
+      else g = "grp-none";
+      d.parent = g; used.add(g);
+      return { data:d, classes:o.classes };
+    });
+    const groupNodes = [...used].map(g => {
+      if (g === "grp-none") return { data:{ id:g, label:"散卡（无 PRD 归属）" } };
+      const pid = g.slice(4), p = nodeById.get(pid);
+      return { data:{ id:g, label:"PRD #" + pid + " " + (((p && p.title) || "").slice(0,18)) } };
+    });
+    const blockEdges = edges.filter(e => e.data.type === "blocks");
+    els = [...groupNodes, ...memberNodes, ...blockEdges];
+    layout = { name:"dagre", rankDir:"TB", nodeSep:20, rankSep:50, edgeSep:10 };
+  } else {
+    // A — 依赖图
+    els = [...nodes, ...edges];
+    layout = { name:"dagre", rankDir:"TB", nodeSep:24, rankSep:60, edgeSep:12 };
+  }
+
+  CY = cytoscape({
+    container: cyDiv, elements: els, style, layout,
+    wheelSensitivity: 0.25, minZoom: 0.15, maxZoom: 2.5,
+  });
+  CY.on("tap", "node", evt => { if (!evt.target.isParent()) showPanel(evt.target.data()); });
+  CY.on("tap", evt => { if (evt.target === CY) closePanel(); });
+  CY.on("mouseover", "node", evt => {
+    const n = evt.target; if (n.isParent()) return;
+    CY.elements().difference(n.closedNeighborhood()).addClass("dim");
+  });
+  CY.on("mouseout", "node", () => CY.elements().removeClass("dim"));
+  setTimeout(() => CY.fit(undefined, 40), 30);
+}
+
+// ---- C：就绪看板（按派活优先级分栏，每卡仍带「为什么/谁挡着」）----
+function bcardHTML(n) {
+  const blk = (n.blockedBy||[]).map(b => {
+    const bn = nodeById.get(String(b));
+    const closed = bn && bn.state === "CLOSED";
+    return `<span class="${closed?'blk-done':'blk-open'}">${closed?'✓':'⛔'}#${b}</span>`;
+  }).join(" ");
+  const prd = n.prd != null ? `<span class="prd-tag">PRD #${n.prd}</span>` : "";
+  const oc = openBlockerCount(n);
+  const wait = (!n.ready && oc > 0) ? `<span class="blk-open">还差 ${oc} 个前置</span>` : "";
+  return `<div class="bcard ${n.ready?'ready':''}" data-id="${n.id}">
+    <div class="bnum">#${n.number}${n.ready?' ★':''}</div>
+    <div class="btitle">${(n.title||"").slice(0,64)}</div>
+    <div class="bmeta">${wait}${prd}${blk?`<span>${blk}</span>`:""}</div>
+  </div>`;
+}
+function renderBoard() {
+  const board = document.getElementById("board");
+  const open = D.nodes.filter(n => !isClosed(n) && n.stage !== "missing");
+  const blockedTodo = open.filter(n => !n.ready && n.stage === "todo")
+    .sort((a,b) => openBlockerCount(a) - openBlockerCount(b)); // 最接近就绪的排前
+  const cols = [
+    { title:"🟡 就绪 · 可马上派", color:"#ffd400", list: open.filter(n => n.ready && n.stage !== "in-review") },
+    { title:"🔜 待开发 · 还被挡", color:"#388bfd", list: blockedTodo },
+    { title:"🟣 开发审查中",     color:"#a371f7", list: open.filter(n => n.stage==="in-review") },
+    { title:"🟠 待我验收",       color:"#db8a34", list: open.filter(n => n.stage==="accept") },
+    { title:"⚪ 待打理",         color:"#7d8896", list: open.filter(n => n.stage==="triage") },
+  ];
+  board.innerHTML = cols.map(col => `
+    <div class="col">
+      <h3><span style="color:${col.color}">${col.title}</span><span class="cnt">${col.list.length}</span></h3>
+      <div class="cards">
+        ${col.list.length ? col.list.map(bcardHTML).join("") : '<div class="col-empty">— 空 —</div>'}
+      </div>
+    </div>`).join("");
+  board.querySelectorAll(".bcard").forEach(el =>
+    el.addEventListener("click", () => showPanel(nodeById.get(el.dataset.id))));
+}
+
+// ---- 详情面板 ----
+function showPanel(n) {
+  const blockers = (n.blockedBy||[]).map(b => {
+    const bn = nodeById.get(String(b));
+    const closed = bn && bn.state === "CLOSED";
+    return `<span class="chip">#${b} ${closed ? "✅已关" : "⛔未关"}</span>`;
+  }).join(" ") || '<span style="color:var(--dim)">无</span>';
+  const adrs = (n.adrs||[]).map(a =>
+    `<a href="https://github.com/${REPO}/tree/main/docs/adr" target="_blank">ADR-${a}</a>`
+  ).join("、") || '<span style="color:var(--dim)">无</span>';
+  const prd = n.prd != null
+    ? `<a href="https://github.com/${REPO}/issues/${n.prd}" target="_blank">#${n.prd}</a> ${
+        nodeById.get(String(n.prd))?.title?.slice(0,40) || ""}`
+    : '<span style="color:var(--dim)">无</span>';
+  const labels = (n.labels||[]).map(l => `<span class="chip">${l}</span>`).join(" ")
+    || '<span style="color:var(--dim)">无</span>';
+
+  document.getElementById("panel-body").innerHTML = `
+    <div class="num">#${n.number} · ${n.state}</div>
+    <h2>${n.title || ""}</h2>
+    ${n.ready ? '<div class="ready-badge">★ 就绪 — 可马上放给 agent</div>' : ""}
+    <div class="field"><div class="k">阶段</div>
+      <span class="chip" style="border-color:${STAGE_COLOR[n.stage]}">${STAGE_NAME[n.stage]||n.stage}</span>
+      ${n.hasOpenPR ? '<span class="chip">有 open PR</span>' : ""}</div>
+    <div class="field"><div class="k">标签</div>${labels}</div>
+    <div class="field"><div class="k">Blocked by（谁挡着它）</div>${blockers}</div>
+    <div class="field"><div class="k">归属 PRD（为什么链·卡片端）</div>${prd}</div>
+    <div class="field"><div class="k">引用 ADR（为什么链·文档端，住 repo）</div>${adrs}</div>
+    ${(n.warnings&&n.warnings.length)?`<div class="field"><div class="k" style="color:#e3a857">⚠ linter</div>${n.warnings.join("；")}</div>`:""}
+    <div class="field"><a href="https://github.com/${REPO}/issues/${n.number}" target="_blank">在 GitHub 打开 #${n.number} ↗</a></div>
+  `;
+  document.getElementById("panel").classList.add("open");
+}
+function closePanel(){ document.getElementById("panel").classList.remove("open"); }
+
+// ---- 切换条 ----
+const KEYS = ["A","B"];
+let currentVariant = "A";   // 当前版本以此为准（不依赖 URL，file:// 下 URL 可能更新失败）
+function setVariant(v){
+  if (!KEYS.includes(v)) v = "A";
+  currentVariant = v;
+  // file:// 下某些浏览器会拦 replaceState —— 包一层，拦了也不影响切换
+  try { const url = new URL(location.href); url.searchParams.set("variant", v); history.replaceState(null, "", url); } catch (_) {}
+  document.getElementById("sw-label").textContent = VARIANTS[v];
+  closePanel();
+  render(v);
+}
+function cycle(dir){
+  const i = (KEYS.indexOf(currentVariant) + dir + KEYS.length) % KEYS.length;
+  setVariant(KEYS[i]);
+}
+window.addEventListener("keydown", e => {
+  const t = e.target.tagName;
+  if (t === "INPUT" || t === "TEXTAREA" || e.target.isContentEditable) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+
+setVariant(new URL(location.href).searchParams.get("variant") || "A");
+</script>
+</body>
+</html>
