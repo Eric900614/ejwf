@@ -14,13 +14,14 @@ export function App() {
           <div>
             <p className="text-sm font-medium text-slate-500">Agents 团队驾驶舱</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
-              Open 卡片依赖 DAG
+              卡片依赖 DAG
             </h1>
           </div>
-          <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
             <Metric label="repo" value={sourceRepo} />
             <Metric label="卡片" value={String(graph.nodes.length)} />
             <Metric label="依赖边" value={String(graph.edges.length)} />
+            <Metric label="就绪" value={String(graph.nodes.filter((node) => node.isReady).length)} />
             <Metric label="拉取时间" value={fetchedLabel} />
           </dl>
         </div>
@@ -45,6 +46,18 @@ export function App() {
             ))}
           </div>
 
+          <h2 className="mt-5 text-base font-semibold">箭头图例</h2>
+          <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="h-0 w-8 border-t-2 border-slate-500" aria-hidden="true" />
+              <span>仍在阻塞</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-0 w-8 border-t-2 border-dashed border-green-600" aria-hidden="true" />
+              <span>已满足</span>
+            </div>
+          </div>
+
           <h2 className="mt-5 text-base font-semibold">卡片列表</h2>
           <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
             {cards.map((card) => (
@@ -64,6 +77,11 @@ export function App() {
                   <span className="min-w-0">
                     <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
                     <span className="text-slate-900">{card.title}</span>
+                    {graph.nodes.find((node) => node.card.number === card.number)?.isReady ? (
+                      <span className="ml-2 inline-block rounded-sm bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
+                        就绪
+                      </span>
+                    ) : null}
                   </span>
                 </span>
               </a>

@@ -6,13 +6,17 @@ export interface GraphNode {
   id: string;
   card: Card;
   stage: CardStage;
+  isReady: boolean;
 }
+
+export type GraphEdgeStatus = "blocking" | "satisfied";
 
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
   dependency: DependencyEdge;
+  status: GraphEdgeStatus;
 }
 
 export interface DependencyGraph {
@@ -21,10 +25,16 @@ export interface DependencyGraph {
 }
 
 export function buildDependencyGraph(cards: Card[]): DependencyGraph {
+  const cardByNumber = new Map(cards.map((card) => [card.number, card]));
+  const dependenciesByCardNumber = new Map(
+    cards.map((card) => [card.number, parseBlockedByEdges(card)])
+  );
+
   const nodes = cards.map((card) => ({
     id: String(card.number),
     card,
-    stage: deriveCardStage(card)
+    stage: deriveCardStage(card),
+    isReady: isReadyForAgent(card, dependenciesByCardNumber.get(card.number) ?? [], cardByNumber)
   }));
 
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -32,7 +42,7 @@ export function buildDependencyGraph(cards: Card[]): DependencyGraph {
   const edges: GraphEdge[] = [];
 
   for (const card of cards) {
-    for (const dependency of parseBlockedByEdges(card)) {
+    for (const dependency of dependenciesByCardNumber.get(card.number) ?? []) {
       const source = String(dependency.blockerNumber);
       const target = String(dependency.blockedNumber);
 
@@ -52,7 +62,13 @@ export function buildDependencyGraph(cards: Card[]): DependencyGraph {
       }
       seenEdgeIds.add(id);
 
-      edges.push({ id, source, target, dependency });
+      edges.push({
+        id,
+        source,
+        target,
+        dependency,
+        status: cardByNumber.get(dependency.blockerNumber)?.state === "CLOSED" ? "satisfied" : "blocking"
+      });
     }
   }
 
@@ -60,4 +76,31 @@ export function buildDependencyGraph(cards: Card[]): DependencyGraph {
     nodes,
     edges
   };
+}
+
+export function findMissingBlockerNumbers(cards: Card[]): number[] {
+  const cardNumbers = new Set(cards.map((card) => card.number));
+  const missingBlockerNumbers = new Set<number>();
+
+  for (const card of cards) {
+    for (const dependency of parseBlockedByEdges(card)) {
+      if (!cardNumbers.has(dependency.blockerNumber)) {
+        missingBlockerNumbers.add(dependency.blockerNumber);
+      }
+    }
+  }
+
+  return [...missingBlockerNumbers].sort((left, right) => left - right);
+}
+
+function isReadyForAgent(
+  card: Card,
+  dependencies: DependencyEdge[],
+  cardByNumber: Map<number, Card>
+): boolean {
+  if (card.state !== "OPEN" || !card.labels?.some((label) => label.name === "ready-for-agent")) {
+    return false;
+  }
+
+  return dependencies.every((dependency) => cardByNumber.get(dependency.blockerNumber)?.state === "CLOSED");
 }

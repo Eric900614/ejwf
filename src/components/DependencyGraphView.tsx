@@ -32,6 +32,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           data: {
             id: node.id,
             label: `#${node.card.number}\n${node.card.title}`,
+            ready: node.isReady ? "true" : "false",
             stage: node.stage
           }
         })),
@@ -39,6 +40,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           data: {
             id: edge.id,
             source: edge.source,
+            status: edge.status,
             target: edge.target
           }
         }))
@@ -83,6 +85,13 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           };
         }),
         {
+          selector: 'node[ready = "true"]',
+          style: {
+            "border-color": "#facc15",
+            "border-width": "5px"
+          }
+        },
+        {
           selector: "edge",
           style: {
             "curve-style": "bezier",
@@ -90,6 +99,14 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
             "target-arrow-color": "#64748b",
             "target-arrow-shape": "triangle",
             width: "2px"
+          }
+        },
+        {
+          selector: 'edge[status = "satisfied"]',
+          style: {
+            "line-color": "#16a34a",
+            "line-style": "dashed",
+            "target-arrow-color": "#16a34a"
           }
         }
       ]
@@ -110,5 +127,5 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
     );
   }
 
-  return <div aria-label="Open 卡片依赖图" className="h-full min-h-[560px]" ref={containerRef} />;
+  return <div aria-label="卡片依赖图" className="h-full min-h-[560px]" ref={containerRef} />;
 }
