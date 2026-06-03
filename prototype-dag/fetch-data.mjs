@@ -1,7 +1,7 @@
 // ============================================================================
 // PROTOTYPE — throwaway. 一次性、只读。用完即删（或把结论折回真代码）。
 // ----------------------------------------------------------------------------
-// 它在干啥：拉 foravia 仓库的真实 open issues，用确定性正则解析依赖边
+// 它在干啥：拉目标仓库的真实 open issues，用确定性正则解析依赖边
 //           （## Blocked by 段 / ## Parent 段 / ADR-NNNN），派生 5 桶阶段、
 //           算「就绪」，吐成 data.js 供 index.html 画图。
 //
@@ -9,32 +9,42 @@
 //   真实数据画成依赖 DAG，到底清爽好用、还是糊成一团面条？
 //
 // 不上 LLM（约定已高度结构化，正则即可，可重复可调试）。无 npm 依赖。
-// 运行：node fetch-data.mjs   （需要本机 gh 已登录）
+// 运行：node fetch-data.mjs owner/repo   （需要本机 gh 已登录）
 // ============================================================================
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
-const REPO = "Eric900614/foravia2027_harness_prod";
+const REPO = process.argv[2] || process.env.COCKPIT_REPO;
+
+if (!REPO) {
+  console.error("[fetch] 用法：node fetch-data.mjs owner/repo");
+  console.error("[fetch] 也可先设置环境变量 COCKPIT_REPO=owner/repo");
+  process.exit(1);
+}
+
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(REPO)) {
+  console.error(`[fetch] repo 必须是 owner/repo 格式，收到：${REPO}`);
+  process.exit(1);
+}
 
 function gh(args) {
-  // 只传固定参数给 gh，不插值任何外部数据 —— 命令字符串安全。
-  return execSync(`gh ${args}`, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
+  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
 }
 
 console.error(`[fetch] 拉取 ${REPO} 的真实数据 …`);
 
 // 1) open issues（带正文，用来解析边）
 const openIssues = JSON.parse(
-  gh(`issue list --repo ${REPO} --state open --limit 300 --json number,title,body,labels,state`)
+  gh(["issue", "list", "--repo", REPO, "--state", "open", "--limit", "300", "--json", "number,title,body,labels,state"])
 );
 // 2) 全部 issues 的轻量元数据（无正文）—— 用来解析被引用到的「已关闭」卡的状态/标题/标签
 const allMeta = JSON.parse(
-  gh(`issue list --repo ${REPO} --state all --limit 600 --json number,title,labels,state`)
+  gh(["issue", "list", "--repo", REPO, "--state", "all", "--limit", "600", "--json", "number,title,labels,state"])
 );
 // 3) open PRs（用来标「开发审查中」）
 const openPRs = JSON.parse(
-  gh(`pr list --repo ${REPO} --state open --limit 300 --json number,title,body,headRefName`)
+  gh(["pr", "list", "--repo", REPO, "--state", "open", "--limit", "300", "--json", "number,title,body,headRefName"])
 );
 
 console.error(

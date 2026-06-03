@@ -6,7 +6,7 @@ status: accepted
 
 ## 决定
 
-驾驶舱**不**把 GitHub Projects 看板当作数据主权层。**卡片的阶段**由 issue 的**标签**（+ 关联 PR 的状态）推导；**卡片之间的依赖**从 issue **正文里的 `#引用` 与关键词**（`Depends on`、`Source: ADR-xxxx`、`TB1/TB2`、`step 1/2`、`carve M1/M2`）解析。驾驶舱**自己渲染**视图（图状，而非扁平看板）并负责写回标签，GitHub 那边的数据组织方式一个字都不用改。
+驾驶舱**不**把 GitHub Projects 看板当作数据主权层。**卡片的阶段**由 issue 的**标签**（+ 关联 PR 的状态）推导；**卡片之间的依赖**从 issue **正文里的 `#引用` 与关键词**（`Depends on`、`Source: ADR-xxxx`、`TB1/TB2`、`step 1/2`、`carve M1/M2`）解析。驾驶舱**自己渲染**视图（图状，而非扁平看板），TB1 只读取 GitHub 上已有的标签与正文；是否写回标签留到后续阶段单独决策。GitHub 那边的数据组织方式一个字都不用改。
 
 ## 背景 / 为什么
 
