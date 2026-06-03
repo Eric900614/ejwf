@@ -4,6 +4,7 @@ import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { cards, fetchedAt, sourceRepo } from "./data/cards.generated";
 
 const graph = buildDependencyGraph(cards);
+const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const fetchedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString("zh-CN") : "尚未拉取";
 
 export function App() {
@@ -49,11 +50,19 @@ export function App() {
           <h2 className="mt-5 text-base font-semibold">箭头图例</h2>
           <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
             <div className="flex items-center gap-2">
-              <span className="h-0 w-8 border-t-2 border-slate-500" aria-hidden="true" />
+              <span
+                className="h-0 w-8 border-t-2"
+                style={{ borderColor: "var(--color-dep-blocking)" }}
+                aria-hidden="true"
+              />
               <span>仍在阻塞</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-0 w-8 border-t-2 border-dashed border-green-600" aria-hidden="true" />
+              <span
+                className="h-0 w-8 border-t-2 border-dashed"
+                style={{ borderColor: "var(--color-dep-satisfied)" }}
+                aria-hidden="true"
+              />
               <span>已满足</span>
             </div>
           </div>
@@ -77,7 +86,7 @@ export function App() {
                   <span className="min-w-0">
                     <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
                     <span className="text-slate-900">{card.title}</span>
-                    {graph.nodes.find((node) => node.card.number === card.number)?.isReady ? (
+                    {readyByCardNumber.get(card.number) ? (
                       <span className="ml-2 inline-block rounded-sm bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
                         就绪
                       </span>

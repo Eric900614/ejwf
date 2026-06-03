@@ -22,8 +22,13 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
     // stage design tokens to concrete colors from the same single source the UI
     // uses (src/styles.css `@theme`, ADR-0004).
     const rootStyles = getComputedStyle(document.documentElement);
+    const cssVar = (name: string, fallback: string) =>
+      rootStyles.getPropertyValue(name).trim() || fallback;
     const stageColor = (stage: (typeof stageDefinitions)[number]) =>
-      rootStyles.getPropertyValue(`--color-stage-${stage.id}`).trim() || stage.color;
+      cssVar(`--color-stage-${stage.id}`, stage.color);
+    const readyColor = cssVar("--color-ready", "#facc15");
+    const satisfiedColor = cssVar("--color-dep-satisfied", "#16a34a");
+    const blockingColor = cssVar("--color-dep-blocking", "#64748b");
 
     const cy = cytoscape({
       container: containerRef.current,
@@ -87,7 +92,7 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
         {
           selector: 'node[ready = "true"]',
           style: {
-            "border-color": "#facc15",
+            "border-color": readyColor,
             "border-width": "5px"
           }
         },
@@ -95,8 +100,8 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
           selector: "edge",
           style: {
             "curve-style": "bezier",
-            "line-color": "#64748b",
-            "target-arrow-color": "#64748b",
+            "line-color": blockingColor,
+            "target-arrow-color": blockingColor,
             "target-arrow-shape": "triangle",
             width: "2px"
           }
@@ -104,9 +109,9 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
         {
           selector: 'edge[status = "satisfied"]',
           style: {
-            "line-color": "#16a34a",
+            "line-color": satisfiedColor,
             "line-style": "dashed",
-            "target-arrow-color": "#16a34a"
+            "target-arrow-color": satisfiedColor
           }
         }
       ]

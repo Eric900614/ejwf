@@ -90,12 +90,7 @@ function toCard(issue: GhIssue): Card {
 
 function toCardWithPullRequests(issue: GhIssue): Card {
   return {
-    number: issue.number,
-    title: issue.title,
-    body: issue.body ?? "",
-    state: issue.state,
-    url: issue.url,
-    labels: issue.labels?.map((label) => ({ name: label.name })) ?? [],
+    ...toCard(issue),
     associatedPullRequests: (issue.closedByPullRequestsReferences ?? [])
       .map((pullRequest) => pullRequestsByUrl.get(pullRequest.url))
       .filter((pullRequest): pullRequest is GhPullRequest => pullRequest !== undefined)
