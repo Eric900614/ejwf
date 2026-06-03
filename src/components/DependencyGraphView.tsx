@@ -18,6 +18,13 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
       return;
     }
 
+    // cytoscape renders to canvas and cannot read CSS `var(...)`, so resolve the
+    // stage design tokens to concrete colors from the same single source the UI
+    // uses (src/styles.css `@theme`, ADR-0004).
+    const rootStyles = getComputedStyle(document.documentElement);
+    const stageColor = (stage: (typeof stageDefinitions)[number]) =>
+      rootStyles.getPropertyValue(`--color-stage-${stage.id}`).trim() || stage.color;
+
     const cy = cytoscape({
       container: containerRef.current,
       elements: [
@@ -64,14 +71,17 @@ export function DependencyGraphView({ graph }: DependencyGraphViewProps) {
             width: "180px"
           }
         },
-        ...stageDefinitions.map((stage) => ({
-          selector: `node[stage = "${stage.id}"]`,
-          style: {
-            "background-color": stage.color,
-            "border-color": stage.color,
-            color: "#ffffff"
-          }
-        })),
+        ...stageDefinitions.map((stage) => {
+          const color = stageColor(stage);
+          return {
+            selector: `node[stage = "${stage.id}"]`,
+            style: {
+              "background-color": color,
+              "border-color": color,
+              color: "#ffffff"
+            }
+          };
+        }),
         {
           selector: "edge",
           style: {
