@@ -31,8 +31,8 @@ status: accepted
 
 ## 后果
 
-- **triage 多一项产出**：判定 smoke-or-not，必要时贴 `needs-smoke`。项目的 triage 标签词汇表（`docs/agents/triage-labels.md`）应补入 `needs-smoke`。
+- **triage 多一项产出**：判定 smoke-or-not，必要时贴 `needs-smoke`；项目的 triage 标签词汇表（`docs/agents/triage-labels.md`）记录这个额外 workflow signal。
 - **部分修订 ADR-0001**：其「零新约定 / 不加标签」不再是绝对铁律——本 ADR 为 `needs-smoke` 开了一个有限、有意识的例外；ADR-0001 的精神（数据主权在标签+正文、不接 GitHub Projects）不变。
-- **TB1 只读，所以"自动放行 / 自动关卡"属 Phase 2/3**（写回 GitHub 的能力，ADR-0002）。但 TB1 当下就能用 `needs-smoke` 把「待我验收」这个 **派生阶段** 桶**分两半显示**：带 `needs-smoke` 的＝"等你 smoke"，不带的＝"机器已可判、将来可自动关"——让"盖章"痛点在只读阶段就先变得清楚。
+- **TB1 只读，所以"自动放行 / 自动关卡"属 Phase 2/3**（写回 GitHub 的能力，ADR-0002）。但 TB1 当下就能用 `needs-smoke` 把「待我验收」这个 **派生阶段** 桶**分两半显示**：带 `needs-smoke` 的＝"等你 smoke"；未带 `needs-smoke` 的卡，只有在 smoke-or-not triage 已完成后，才可解释为"机器已可判、将来可自动关"——让"盖章"痛点在只读阶段就先变得清楚，同时避免把未分类卡误当作可自动放行。
 - **工作流可迭代**：本决定是朝北极星的**方向性赌注**，不是定局；真实用起来发现判据/信号不顺，随手感调整（维护者原则：「工作流可以迭代，只要往目标方向优化都可以」）。
 - **自动放行的终点＝全自动关卡**（决定第 4 条），同属 Phase 2/3（TB1 只读做不了关卡）；但它给"放行该做多自动"定了方向：过渡档「批量瞄一眼」是为攒信任、降误判风险的临时手段，不是终态。落地时机与"按卡分速"的快慢，随真实手感迭代。
