@@ -18,6 +18,7 @@ export function DependencyGraphView({
   selectedNodeId
 }: DependencyGraphViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -141,10 +142,31 @@ export function DependencyGraphView({
       }
     });
 
+    cyRef.current = cy;
+
     return () => {
+      cyRef.current = null;
       cy.destroy();
     };
-  }, [graph, onSelectNodeId, selectedNodeId]);
+    // selectedNodeId is intentionally excluded: the initial highlight is seeded
+    // above, and the effect below syncs it without rebuilding the whole graph.
+  }, [graph, onSelectNodeId]);
+
+  // Reflect selection by mutating node data in place — rebuilding the cytoscape
+  // instance just to move the highlight would re-run dagre + cy.fit() on every
+  // tap, throwing away the user's pan/zoom and flickering.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) {
+      return;
+    }
+
+    cy.batch(() => {
+      cy.nodes().forEach((node) => {
+        node.data("selected", node.id() === selectedNodeId ? "true" : "false");
+      });
+    });
+  }, [graph, selectedNodeId]);
 
   if (graph.nodes.length === 0) {
     return (
