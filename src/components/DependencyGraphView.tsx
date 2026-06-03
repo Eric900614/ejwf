@@ -2,18 +2,24 @@ import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
 import { useEffect, useRef } from "react";
 import type { DependencyGraph } from "../domain/graph";
+import type { PrdGroup } from "../domain/prdGroups";
 import { stageDefinitions } from "../domain/stage";
+import { buildDependencyGraphElements } from "./dependencyGraphElements";
 
 cytoscape.use(dagre);
 
 interface DependencyGraphViewProps {
   graph: DependencyGraph;
+  groups?: PrdGroup[];
+  layoutMode?: "dag" | "grouped";
   onSelectNodeId?: (nodeId: string | undefined) => void;
   selectedNodeId?: string;
 }
 
 export function DependencyGraphView({
   graph,
+  groups,
+  layoutMode = "dag",
   onSelectNodeId,
   selectedNodeId
 }: DependencyGraphViewProps) {
@@ -39,36 +45,13 @@ export function DependencyGraphView({
 
     const cy = cytoscape({
       container: containerRef.current,
-      elements: [
-        ...graph.nodes.map((node) => ({
-          data: {
-            id: node.id,
-            label: `#${node.card.number}\n${node.card.title}`,
-            ready: node.isReady ? "true" : "false",
-            selected: node.id === selectedNodeId ? "true" : "false",
-            stage: node.stage
-          }
-        })),
-        ...graph.edges.map((edge) => ({
-          data: {
-            id: edge.id,
-            source: edge.source,
-            status: edge.status,
-            target: edge.target
-          }
-        }))
-      ],
-      layout: {
-        name: "dagre",
-        rankDir: "TB",
-        nodeSep: 70,
-        rankSep: 110
-      } as cytoscape.LayoutOptions,
+      elements: buildDependencyGraphElements(graph, { groups, selectedNodeId }),
+      layout: getLayout(layoutMode),
       maxZoom: 2,
       minZoom: 0.2,
       style: [
         {
-          selector: "node",
+          selector: 'node[card = "true"]',
           style: {
             "background-color": "#ffffff",
             "border-color": "#94a3b8",
@@ -86,10 +69,30 @@ export function DependencyGraphView({
             width: "180px"
           }
         },
+        {
+          selector: 'node[group = "true"]',
+          style: {
+            "background-color": "#f8fafc",
+            "border-color": "#cbd5e1",
+            "border-style": "dashed",
+            "border-width": "2px",
+            color: "#475569",
+            "font-family": "Inter, ui-sans-serif, system-ui, sans-serif",
+            "font-size": "12px",
+            "font-weight": 600,
+            label: "data(label)",
+            padding: "28px",
+            shape: "round-rectangle",
+            "text-halign": "center",
+            "text-margin-y": -8,
+            "text-valign": "top",
+            "text-wrap": "wrap"
+          }
+        },
         ...stageDefinitions.map((stage) => {
           const color = stageColor(stage);
           return {
-            selector: `node[stage = "${stage.id}"]`,
+            selector: `node[card = "true"][stage = "${stage.id}"]`,
             style: {
               "background-color": color,
               "border-color": color,
@@ -98,14 +101,14 @@ export function DependencyGraphView({
           };
         }),
         {
-          selector: 'node[ready = "true"]',
+          selector: 'node[card = "true"][ready = "true"]',
           style: {
             "border-color": readyColor,
             "border-width": "5px"
           }
         },
         {
-          selector: 'node[selected = "true"]',
+          selector: 'node[card = "true"][selected = "true"]',
           style: {
             "border-color": "#0f172a",
             "border-width": "6px"
@@ -133,7 +136,7 @@ export function DependencyGraphView({
     });
 
     cy.fit(undefined, 32);
-    cy.on("tap", "node", (event) => {
+    cy.on("tap", 'node[card = "true"]', (event) => {
       onSelectNodeId?.(String(event.target.id()));
     });
     cy.on("tap", (event) => {
@@ -150,7 +153,7 @@ export function DependencyGraphView({
     };
     // selectedNodeId is intentionally excluded: the initial highlight is seeded
     // above, and the effect below syncs it without rebuilding the whole graph.
-  }, [graph, onSelectNodeId]);
+  }, [graph, groups, layoutMode, onSelectNodeId]);
 
   // Reflect selection by mutating node data in place — rebuilding the cytoscape
   // instance just to move the highlight would re-run dagre + cy.fit() on every
@@ -176,5 +179,28 @@ export function DependencyGraphView({
     );
   }
 
-  return <div aria-label="卡片依赖图" className="h-full min-h-[560px]" ref={containerRef} />;
+  return (
+    <div
+      aria-label="卡片依赖图"
+      className="h-full min-h-[560px] min-w-[780px]"
+      ref={containerRef}
+    />
+  );
+}
+
+function getLayout(layoutMode: "dag" | "grouped"): cytoscape.LayoutOptions {
+  if (layoutMode === "grouped") {
+    return {
+      name: "preset",
+      fit: true,
+      padding: 48
+    } as cytoscape.LayoutOptions;
+  }
+
+  return {
+    name: "dagre",
+    rankDir: "TB",
+    nodeSep: 70,
+    rankSep: 110
+  } as cytoscape.LayoutOptions;
 }
