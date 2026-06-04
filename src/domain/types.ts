@@ -55,3 +55,26 @@ export interface ParseWarning {
   reference?: string;
   referencedNumber?: number;
 }
+
+// 派活提示词的契约类型：被「标准提示词层」数据、「提示词拼装器」逻辑，以及将来
+// 派活核心（命令构造器等）共用，故住共享 types（与 Card 同理），数据与逻辑都依赖它。
+export type DispatchPromptStage = "start" | "submit" | "review" | "merge" | "handoff";
+
+export type DispatchCardType = "code-pr" | "prd-design-pr";
+
+export interface PromptStageCopy {
+  prompt: string;
+}
+
+export interface StandardPromptLayer {
+  common: string;
+  stages: {
+    start: PromptStageCopy;
+    submit: PromptStageCopy;
+    review: PromptStageCopy & {
+      cardTypes: Record<DispatchCardType, string>;
+    };
+    merge: PromptStageCopy;
+    handoff: PromptStageCopy;
+  };
+}

@@ -1,23 +1,8 @@
-export type DispatchPromptStage = "start" | "submit" | "review" | "merge" | "handoff";
-
-export type DispatchCardType = "code-pr" | "prd-design-pr";
-
-export interface StandardPromptLayer {
-  common: string;
-  stages: {
-    start: PromptStageCopy;
-    submit: PromptStageCopy;
-    review: PromptStageCopy & {
-      cardTypes: Record<DispatchCardType, string>;
-    };
-    merge: PromptStageCopy;
-    handoff: PromptStageCopy;
-  };
-}
-
-interface PromptStageCopy {
-  prompt: string;
-}
+import type {
+  DispatchCardType,
+  DispatchPromptStage,
+  StandardPromptLayer
+} from "./types";
 
 export interface ComposeDispatchPromptInput {
   stage: DispatchPromptStage;
@@ -32,25 +17,21 @@ export function composeDispatchPrompt({
   perCardBrief,
   promptLayer
 }: ComposeDispatchPromptInput): string {
-  const stagePrompt = promptLayer.stages[stage];
-  const cardTypePrompt = stage === "review" ? promptLayer.stages.review.cardTypes[cardType] : undefined;
+  const stageCopy = promptLayer.stages[stage];
+  const cardTypeCopy =
+    stage === "review" ? promptLayer.stages.review.cardTypes[cardType] : undefined;
 
-  return [
+  // 每节自带「标题 + 空行 + 正文」，再用空行把各节连起来——保证段落分隔一致。
+  // （卡类型节只在审查阶段存在，不存在时为 undefined，统一在末尾过滤掉。）
+  const sections = [
     "# 派活提示词",
-    "",
-    "## 通用约定",
-    "",
-    promptLayer.common.trim(),
-    "",
-    "## 阶段要求",
-    "",
-    stagePrompt.prompt.trim(),
-    cardTypePrompt ? ["", "## 卡类型要求", "", cardTypePrompt.trim()].join("\n") : undefined,
-    "",
-    "## 这张卡",
-    "",
-    perCardBrief.trim()
-  ]
-    .filter((part): part is string => typeof part === "string" && part.length > 0)
-    .join("\n");
+    `## 通用约定\n\n${promptLayer.common.trim()}`,
+    `## 阶段要求\n\n${stageCopy.prompt.trim()}`,
+    cardTypeCopy ? `## 卡类型要求\n\n${cardTypeCopy.trim()}` : undefined,
+    `## 这张卡\n\n${perCardBrief.trim()}`
+  ];
+
+  return sections
+    .filter((section): section is string => section !== undefined)
+    .join("\n\n");
 }

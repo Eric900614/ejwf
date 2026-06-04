@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { composeDispatchPrompt, type StandardPromptLayer } from "./promptComposer";
+import { composeDispatchPrompt } from "./promptComposer";
 import { standardPromptLayer } from "./standardPromptLayer";
+import type { StandardPromptLayer } from "./types";
 
 describe("composeDispatchPrompt", () => {
   it("拼出开工阶段的通用约定、阶段要求和这张卡 brief", () => {
@@ -39,6 +40,11 @@ describe("composeDispatchPrompt", () => {
     expect(prompt).toContain("所有输出使用中文，用大白话简述。");
     expect(prompt).toContain("按 TDD 做：先写一条行为测试，再做最小实现。");
     expect(prompt).toContain("实现 #31 的标准提示词层。");
+
+    // 各节之间要有空行分隔（防回归：曾因 filter 掉空串，把小标题糊到上一段后面）
+    expect(prompt).toContain("\n\n## 通用约定\n\n");
+    expect(prompt).toContain("\n\n## 阶段要求\n\n");
+    expect(prompt).toContain("\n\n## 这张卡\n\n");
   });
 
   it.each(["start", "submit", "review", "merge", "handoff"] as const)(
@@ -71,6 +77,7 @@ describe("composeDispatchPrompt", () => {
     });
 
     expect(codeReviewPrompt).toContain("按代码 PR 审查。");
+    expect(codeReviewPrompt).toContain("\n\n## 卡类型要求\n\n");
     expect(codeReviewPrompt).not.toContain("按 PRD / 设计 PR 审查。");
     expect(prdReviewPrompt).toContain("按 PRD / 设计 PR 审查。");
     expect(prdReviewPrompt).not.toContain("按代码 PR 审查。");

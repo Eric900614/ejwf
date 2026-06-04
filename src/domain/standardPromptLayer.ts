@@ -1,4 +1,4 @@
-import type { StandardPromptLayer } from "./promptComposer";
+import type { StandardPromptLayer } from "./types";
 
 export const standardPromptLayer: StandardPromptLayer = {
   common: [
