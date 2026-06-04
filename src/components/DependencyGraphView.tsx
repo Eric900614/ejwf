@@ -8,8 +8,8 @@ import { buildDependencyGraphElements } from "./dependencyGraphElements";
 
 cytoscape.use(dagre);
 
-// CJK-friendly, offline system stack for node labels (titles are often Chinese).
-const NODE_FONT = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
+// Fallback only; the live value is read from the CSS design token.
+const NODE_FONT_FALLBACK = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
 
 interface DependencyGraphViewProps {
   graph: DependencyGraph;
@@ -65,6 +65,12 @@ export function DependencyGraphView({
     const elevatedColor = cssVar("--color-console-elevated", "#161d2c");
     const groupBorder = cssVar("--color-console-border-strong", "#33405c");
     const groupText = cssVar("--color-console-muted", "#93a1b8");
+    const nodeBorder = cssVar("--color-node-border", "#2b3650");
+    const nodeText = cssVar("--color-node-text", "#eaf0fb");
+    const nodeClosedSurface = cssVar("--color-node-closed-surface", "#0f141e");
+    const nodeClosedBorder = cssVar("--color-node-closed-border", "#232c3d");
+    const nodeClosedText = cssVar("--color-node-closed-text", "#6f7d96");
+    const nodeFont = cssVar("--font-sans", NODE_FONT_FALLBACK);
 
     const cy = cytoscape({
       container,
@@ -82,10 +88,10 @@ export function DependencyGraphView({
             // A deep, neutral body; the stage rule below tints it. The label sits
             // on a dark fill, so it stays crisp with no heavy text-outline.
             "background-color": elevatedColor,
-            "border-color": "#2b3650",
+            "border-color": nodeBorder,
             "border-width": "1.5px",
-            color: "#eaf0fb",
-            "font-family": NODE_FONT,
+            color: nodeText,
+            "font-family": nodeFont,
             "font-size": "11px",
             "font-weight": 500,
             height: "56px",
@@ -108,7 +114,7 @@ export function DependencyGraphView({
             "border-style": "dashed",
             "border-width": "1.5px",
             color: groupText,
-            "font-family": NODE_FONT,
+            "font-family": nodeFont,
             "font-size": "12px",
             "font-weight": 600,
             label: "data(label)",
@@ -132,9 +138,9 @@ export function DependencyGraphView({
         {
           selector: 'node[card = "true"][state = "CLOSED"]',
           style: {
-            "background-color": "#0f141e",
-            "border-color": "#232c3d",
-            color: "#6f7d96"
+            "background-color": nodeClosedSurface,
+            "border-color": nodeClosedBorder,
+            color: nodeClosedText
           }
         },
         {

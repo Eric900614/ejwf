@@ -488,12 +488,13 @@ function FloatingDetails({
           <p className="mt-1 text-sm font-semibold leading-snug text-console-text">{node.card.title}</p>
         </div>
         <button
+          aria-label="关闭节点详情"
           className="shrink-0 rounded p-1 text-console-muted transition hover:bg-console-elevated hover:text-console-text"
           onClick={onClose}
           title="关闭"
           type="button"
         >
-          <X className="h-4 w-4" />
+          <X aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
 
