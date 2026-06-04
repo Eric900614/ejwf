@@ -37,6 +37,7 @@ export function App() {
               role="group"
             >
               <button
+                aria-pressed={viewMode === "prd"}
                 className={viewMode === "prd" ? activeViewButtonClass : inactiveViewButtonClass}
                 onClick={() => setViewMode("prd")}
                 type="button"
@@ -44,6 +45,7 @@ export function App() {
                 按 PRD 分组
               </button>
               <button
+                aria-pressed={viewMode === "dag"}
                 className={viewMode === "dag" ? activeViewButtonClass : inactiveViewButtonClass}
                 onClick={() => setViewMode("dag")}
                 type="button"

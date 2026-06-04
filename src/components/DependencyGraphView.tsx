@@ -85,6 +85,7 @@ export function DependencyGraphView({
             shape: "round-rectangle",
             "text-halign": "center",
             "text-margin-y": -8,
+            "text-max-width": "320px",
             "text-valign": "top",
             "text-wrap": "wrap"
           }
