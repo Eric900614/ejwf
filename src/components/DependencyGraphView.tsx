@@ -12,6 +12,11 @@ cytoscape.use(dagre);
 // Fallback only; the live value is read from the CSS design token.
 const NODE_FONT_FALLBACK = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
 
+// Matches the node `opacity` of the `cluster = "dimmed"` style rule so a dimmed
+// card and its #N corner badge (an HTML overlay outside cytoscape's canvas, thus
+// unaffected by node opacity) recede together instead of leaving a bright badge.
+const CLUSTER_DIM_OPACITY = 0.28;
+
 interface DependencyGraphViewProps {
   activeClusterNodeIds?: ReadonlySet<string>;
   graph: DependencyGraph;
@@ -174,7 +179,7 @@ export function DependencyGraphView({
             "background-color": clusterDimColor,
             "border-color": clusterDimColor,
             color: clusterDimColor,
-            opacity: 0.28
+            opacity: CLUSTER_DIM_OPACITY
           }
         },
         {
@@ -266,8 +271,10 @@ export function DependencyGraphView({
     const positionBadges = () => {
       const zoom = cy.zoom();
       badgeByNodeId.forEach((badge, id) => {
-        const box = cy.getElementById(id).renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+        const node = cy.getElementById(id);
+        const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
         badge.style.transform = `translate(${box.x1 + 7 * zoom}px, ${box.y1 + 7 * zoom}px) scale(${zoom})`;
+        badge.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
       });
     };
 
