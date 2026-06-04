@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { buildPrdGroups } from "./domain/prdGroups";
@@ -20,8 +20,12 @@ export function App() {
   const [viewMode, setViewMode] = useState<"prd" | "dag">("prd");
   const [showClosedCards, setShowClosedCards] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
-  const visibleGraph = filterVisibleGraph(graph, { showClosedCards });
-  const prdGroups = buildPrdGroups(visibleGraph);
+  // Memoize so the filtered graph and groups keep a stable identity across
+  // renders that don't toggle showClosedCards — otherwise every node tap hands
+  // DependencyGraphView fresh graph/groups props and forces a full cytoscape
+  // rebuild (re-running the layout + cy.fit(), discarding the user's pan/zoom).
+  const visibleGraph = useMemo(() => filterVisibleGraph(graph, { showClosedCards }), [showClosedCards]);
+  const prdGroups = useMemo(() => buildPrdGroups(visibleGraph), [visibleGraph]);
   const selectedNode = visibleGraph.nodes.find((node) => node.id === selectedNodeId);
   const visibleCards = visibleGraph.nodes.map((node) => node.card);
   const hiddenClosedCount = graph.nodes.length - visibleGraph.nodes.length;
