@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
+import { buildPrdGroups } from "./domain/prdGroups";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { adrDocuments, cards, fetchedAt, sourceRepo } from "./data/cards.generated";
 import type { ResolvedAdrReference } from "./domain/adr";
 
 const graph = buildDependencyGraph(cards);
+const prdGroups = buildPrdGroups(graph);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const cardByNumber = new Map(cards.map((card) => [card.number, card]));
 const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
@@ -15,6 +17,7 @@ const fetchedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString("zh-CN") : "
 
 export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(defaultSelectedNodeId);
+  const [viewMode, setViewMode] = useState<"prd" | "dag">("prd");
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId);
 
   return (
@@ -24,23 +27,50 @@ export function App() {
           <div>
             <p className="text-sm font-medium text-slate-500">Agents 团队驾驶舱</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
-              卡片依赖 DAG
+              按 PRD 分组
             </h1>
           </div>
-          <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
-            <Metric label="repo" value={sourceRepo} />
-            <Metric label="卡片" value={String(graph.nodes.length)} />
-            <Metric label="依赖边" value={String(graph.edges.length)} />
-            <Metric label="就绪" value={String(graph.nodes.filter((node) => node.isReady).length)} />
-            <Metric label="拉取时间" value={fetchedLabel} />
-          </dl>
+          <div className="flex flex-col gap-3 md:items-end">
+            <div
+              aria-label="视图切换"
+              className="inline-grid grid-cols-2 rounded border border-slate-200 bg-slate-100 p-1 text-sm"
+              role="group"
+            >
+              <button
+                aria-pressed={viewMode === "prd"}
+                className={viewMode === "prd" ? activeViewButtonClass : inactiveViewButtonClass}
+                onClick={() => setViewMode("prd")}
+                type="button"
+              >
+                按 PRD 分组
+              </button>
+              <button
+                aria-pressed={viewMode === "dag"}
+                className={viewMode === "dag" ? activeViewButtonClass : inactiveViewButtonClass}
+                onClick={() => setViewMode("dag")}
+                type="button"
+              >
+                依赖图
+              </button>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-6">
+              <Metric label="repo" value={sourceRepo} />
+              <Metric label="分组" value={String(prdGroups.length)} />
+              <Metric label="卡片" value={String(graph.nodes.length)} />
+              <Metric label="依赖边" value={String(graph.edges.length)} />
+              <Metric label="就绪" value={String(graph.nodes.filter((node) => node.isReady).length)} />
+              <Metric label="拉取时间" value={fetchedLabel} />
+            </dl>
+          </div>
         </div>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-h-[560px] overflow-hidden rounded border border-slate-200 bg-white">
+        <div className="min-h-[560px] self-start overflow-auto rounded border border-slate-200 bg-white">
           <DependencyGraphView
             graph={graph}
+            groups={viewMode === "prd" ? prdGroups : undefined}
+            layoutMode={viewMode === "prd" ? "grouped" : "dag"}
             onSelectNodeId={setSelectedNodeId}
             selectedNodeId={selectedNodeId}
           />
@@ -124,6 +154,10 @@ export function App() {
 const stageColorById = Object.fromEntries(
   stageDefinitions.map((stage) => [stage.id, stage.color])
 ) as Record<(typeof stageDefinitions)[number]["id"], string>;
+const activeViewButtonClass =
+  "rounded-sm bg-white px-3 py-1.5 font-semibold text-slate-950 shadow-sm";
+const inactiveViewButtonClass =
+  "rounded-sm px-3 py-1.5 font-medium text-slate-600 hover:bg-white/70 hover:text-slate-950";
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
