@@ -50,6 +50,9 @@
   --color-node-closed-text: #6f7d96;
   --color-dependency-cluster-focus: #e0f2fe;
   --color-dependency-cluster-dim: #475569;
+  --color-staleness-surface: rgba(245, 158, 11, 0.14);
+  --color-staleness-border: rgba(245, 158, 11, 0.36);
+  --color-staleness-text: #fcd34d;
 
   /* Distinctive typography without any network fetch (大陆离线): a telemetry
      monospace for IDs / metrics / codes, a system CJK-friendly sans for body. */
@@ -113,6 +116,23 @@ body {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.node-staleness {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  padding: 2px 6px;
+  border: 1px solid var(--color-staleness-border);
+  border-radius: 4px;
+  background: var(--color-staleness-surface);
+  color: var(--color-staleness-text);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }

@@ -42,6 +42,7 @@ export function App() {
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("list");
   const [wheelSensitivity, setWheelSensitivity] = useState(0.3);
+  const [now] = useState(() => new Date());
 
   // Memoize so the filtered graph and groups keep a stable identity across
   // renders that don't toggle showClosedCards — otherwise every node tap hands
@@ -169,6 +170,7 @@ export function App() {
               groups={viewMode === "prd" ? prdGroups : undefined}
               layoutMode={viewMode === "prd" ? "grouped" : "dag"}
               activeClusterNodeIds={activeClusterNodeIds}
+              now={now}
               onSelectNodeId={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
               wheelSensitivity={wheelSensitivity}
@@ -556,6 +558,10 @@ function FloatingDetails({
           )}
         </Field>
 
+        <Field label="创建时间">
+          <span className="font-mono text-xs text-console-muted">{formatCardDate(node.card.createdAt)}</span>
+        </Field>
+
         <Field label="归属 PRD">
           {parentPrd && parentUrl ? (
             <a className="text-console-accent hover:underline" href={parentUrl} rel="noreferrer" target="_blank">
@@ -609,4 +615,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <div className="mt-1 text-console-text">{children}</div>
     </div>
   );
+}
+
+function formatCardDate(value: string | undefined): string {
+  if (!value) {
+    return "未知";
+  }
+
+  return new Date(value).toLocaleString("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
 }

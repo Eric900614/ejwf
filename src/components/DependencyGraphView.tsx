@@ -22,6 +22,7 @@ interface DependencyGraphViewProps {
   graph: DependencyGraph;
   groups?: PrdGroup[];
   layoutMode?: "dag" | "grouped";
+  now?: Date;
   onSelectNodeId?: (nodeId: string | undefined) => void;
   selectedNodeId?: string;
   wheelSensitivity?: number;
@@ -32,6 +33,7 @@ export function DependencyGraphView({
   graph,
   groups,
   layoutMode = "dag",
+  now,
   onSelectNodeId,
   selectedNodeId,
   wheelSensitivity = 0.3
@@ -89,7 +91,7 @@ export function DependencyGraphView({
 
     const cy = cytoscape({
       container,
-      elements: buildDependencyGraphElements(graph, { groups, selectedNodeId }),
+      elements: buildDependencyGraphElements(graph, { groups, now, selectedNodeId }),
       layout: getLayout(layoutMode),
       maxZoom: 2,
       minZoom: 0.2,
@@ -260,15 +262,25 @@ export function DependencyGraphView({
     // the title and each number rides the top-left corner as its own badge,
     // repositioned and scaled from the node's rendered box on every frame.
     const badgeByNodeId = new Map<string, HTMLDivElement>();
+    const stalenessByNodeId = new Map<string, HTMLDivElement>();
     cy.nodes('[card = "true"]').forEach((node) => {
       const badge = document.createElement("div");
       badge.className = "node-badge";
       badge.textContent = `#${node.id()}`;
       overlay.appendChild(badge);
       badgeByNodeId.set(node.id(), badge);
+
+      const stalenessLabel = node.data("stalenessLabel");
+      if (typeof stalenessLabel === "string" && stalenessLabel.length > 0) {
+        const staleness = document.createElement("div");
+        staleness.className = "node-staleness";
+        staleness.textContent = stalenessLabel;
+        overlay.appendChild(staleness);
+        stalenessByNodeId.set(node.id(), staleness);
+      }
     });
 
-    const positionBadges = () => {
+    const positionOverlays = () => {
       const zoom = cy.zoom();
       badgeByNodeId.forEach((badge, id) => {
         const node = cy.getElementById(id);
@@ -276,10 +288,16 @@ export function DependencyGraphView({
         badge.style.transform = `translate(${box.x1 + 7 * zoom}px, ${box.y1 + 7 * zoom}px) scale(${zoom})`;
         badge.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
       });
+      stalenessByNodeId.forEach((staleness, id) => {
+        const node = cy.getElementById(id);
+        const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+        staleness.style.transform = `translate(${box.x1 + 8 * zoom}px, ${box.y2 - 20 * zoom}px) scale(${zoom})`;
+        staleness.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
+      });
     };
 
-    positionBadges();
-    cy.on("render", positionBadges);
+    positionOverlays();
+    cy.on("render", positionOverlays);
 
     // Adjustable wheel zoom toward the cursor (replaces cytoscape's built-in).
     const handleWheel = (event: WheelEvent) => {
@@ -305,14 +323,15 @@ export function DependencyGraphView({
     return () => {
       container.removeEventListener("wheel", handleWheel);
       resizeObserver.disconnect();
-      cy.off("render", positionBadges);
+      cy.off("render", positionOverlays);
       badgeByNodeId.forEach((badge) => badge.remove());
+      stalenessByNodeId.forEach((staleness) => staleness.remove());
       cyRef.current = null;
       cy.destroy();
     };
     // selectedNodeId is intentionally excluded: the initial highlight is seeded
     // above, and the effect below syncs it without rebuilding the whole graph.
-  }, [graph, groups, layoutMode, onSelectNodeId]);
+  }, [graph, groups, layoutMode, now, onSelectNodeId]);
 
   // Reflect selection by mutating node data in place — rebuilding the cytoscape
   // instance just to move the highlight would re-run dagre + cy.fit() on every

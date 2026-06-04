@@ -1,9 +1,11 @@
 import type cytoscape from "cytoscape";
 import type { DependencyGraph } from "../domain/graph";
 import type { PrdGroup } from "../domain/prdGroups";
+import { formatStaleness } from "../domain/staleness";
 
 interface DependencyGraphElementOptions {
   groups?: PrdGroup[];
+  now?: Date;
   selectedNodeId?: string;
 }
 
@@ -20,6 +22,7 @@ export function buildDependencyGraphElements(
   }
 
   const nodePositionById = options.groups ? positionGroupedNodes(options.groups) : new Map();
+  const now = options.now ?? new Date();
 
   return [
     ...(options.groups ?? []).map((group) => ({
@@ -38,6 +41,9 @@ export function buildDependencyGraphElements(
         stage: node.stage,
         card: "true",
         state: node.card.state,
+        ...(node.card.state === "OPEN" && node.card.updatedAt
+          ? { stalenessLabel: formatStaleness(node.card.updatedAt, now) }
+          : {}),
         ...(groupByNodeId.has(node.id) ? { parent: groupByNodeId.get(node.id) } : {})
       },
       ...(nodePositionById.has(node.id) ? { position: nodePositionById.get(node.id) } : {})

@@ -4,6 +4,8 @@ export interface Card {
   body: string;
   state: "OPEN" | "CLOSED";
   url?: string;
+  updatedAt?: string;
+  createdAt?: string;
   labels?: CardLabel[];
   associatedPullRequests?: AssociatedPullRequest[];
 }

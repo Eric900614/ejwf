@@ -12,6 +12,8 @@ interface GhIssue {
   body: string;
   state: "OPEN" | "CLOSED";
   url?: string;
+  updatedAt?: string;
+  createdAt?: string;
   labels?: Array<{ name: string }>;
   closedByPullRequestsReferences?: GhPullRequestReference[];
 }
@@ -42,7 +44,7 @@ const issuesJson = execFileSync(
     "--limit",
     "1000",
     "--json",
-    "number,title,body,state,url,labels,closedByPullRequestsReferences"
+    "number,title,body,state,url,updatedAt,createdAt,labels,closedByPullRequestsReferences"
   ],
   { encoding: "utf8" }
 );
@@ -93,6 +95,8 @@ function toCard(issue: GhIssue): Card {
     body: issue.body ?? "",
     state: issue.state,
     url: issue.url,
+    updatedAt: issue.updatedAt,
+    createdAt: issue.createdAt,
     labels: issue.labels?.map((label) => ({ name: label.name })) ?? []
   };
 }
@@ -146,7 +150,7 @@ function fetchIssue(number: number): GhIssue | undefined {
           "--repo",
           repo,
           "--json",
-          "number,title,body,state,url,labels,closedByPullRequestsReferences"
+          "number,title,body,state,url,updatedAt,createdAt,labels,closedByPullRequestsReferences"
         ],
         { encoding: "utf8" }
       )
