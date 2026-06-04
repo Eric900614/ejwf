@@ -1,6 +1,7 @@
 import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
 import { useEffect, useRef } from "react";
+import { getDependencyClusterNodeIds } from "../domain/dependencyCluster";
 import type { DependencyGraph } from "../domain/graph";
 import type { PrdGroup } from "../domain/prdGroups";
 import { stageDefinitions } from "../domain/stage";
@@ -11,7 +12,13 @@ cytoscape.use(dagre);
 // Fallback only; the live value is read from the CSS design token.
 const NODE_FONT_FALLBACK = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
 
+// Matches the node `opacity` of the `cluster = "dimmed"` style rule so a dimmed
+// card and its #N corner badge (an HTML overlay outside cytoscape's canvas, thus
+// unaffected by node opacity) recede together instead of leaving a bright badge.
+const CLUSTER_DIM_OPACITY = 0.28;
+
 interface DependencyGraphViewProps {
+  activeClusterNodeIds?: ReadonlySet<string>;
   graph: DependencyGraph;
   groups?: PrdGroup[];
   layoutMode?: "dag" | "grouped";
@@ -21,6 +28,7 @@ interface DependencyGraphViewProps {
 }
 
 export function DependencyGraphView({
+  activeClusterNodeIds,
   graph,
   groups,
   layoutMode = "dag",
@@ -31,6 +39,7 @@ export function DependencyGraphView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const selectedNodeIdRef = useRef(selectedNodeId);
   const sensitivityRef = useRef(wheelSensitivity);
 
   // Keep the live sensitivity in a ref so the slider retunes wheel zoom without
@@ -38,6 +47,10 @@ export function DependencyGraphView({
   useEffect(() => {
     sensitivityRef.current = wheelSensitivity;
   }, [wheelSensitivity]);
+
+  useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId;
+  }, [selectedNodeId]);
 
   useEffect(() => {
     if (!containerRef.current || !overlayRef.current) {
@@ -70,6 +83,8 @@ export function DependencyGraphView({
     const nodeClosedSurface = cssVar("--color-node-closed-surface", "#0f141e");
     const nodeClosedBorder = cssVar("--color-node-closed-border", "#232c3d");
     const nodeClosedText = cssVar("--color-node-closed-text", "#6f7d96");
+    const clusterFocusColor = cssVar("--color-dependency-cluster-focus", "#e0f2fe");
+    const clusterDimColor = cssVar("--color-dependency-cluster-dim", "#475569");
     const nodeFont = cssVar("--font-sans", NODE_FONT_FALLBACK);
 
     const cy = cytoscape({
@@ -151,6 +166,23 @@ export function DependencyGraphView({
           }
         },
         {
+          selector: 'node[card = "true"][cluster = "active"]',
+          style: {
+            "border-color": clusterFocusColor,
+            "border-width": "3px",
+            color: nodeText
+          }
+        },
+        {
+          selector: 'node[card = "true"][cluster = "dimmed"]',
+          style: {
+            "background-color": clusterDimColor,
+            "border-color": clusterDimColor,
+            color: clusterDimColor,
+            opacity: CLUSTER_DIM_OPACITY
+          }
+        },
+        {
           selector: 'node[card = "true"][selected = "true"]',
           style: {
             "border-color": accentColor,
@@ -175,16 +207,48 @@ export function DependencyGraphView({
             "line-style": "dashed",
             "target-arrow-color": satisfiedColor
           }
+        },
+        {
+          selector: 'edge[cluster = "active"]',
+          style: {
+            "line-color": clusterFocusColor,
+            "line-opacity": 1,
+            "target-arrow-color": clusterFocusColor,
+            width: "3px"
+          }
+        },
+        {
+          selector: 'edge[cluster = "dimmed"]',
+          style: {
+            "line-color": clusterDimColor,
+            "line-opacity": 0.22,
+            "target-arrow-color": clusterDimColor
+          }
         }
       ]
     });
 
     cy.fit(undefined, 36);
+    let lastTappedNodeId: string | undefined;
+    let lastTapAt = 0;
     cy.on("tap", 'node[card = "true"]', (event) => {
-      onSelectNodeId?.(String(event.target.id()));
+      const nodeId = String(event.target.id());
+      const now = Date.now();
+      const isDoubleTap = lastTappedNodeId === nodeId && now - lastTapAt <= 320;
+      lastTappedNodeId = nodeId;
+      lastTapAt = now;
+
+      if (isDoubleTap) {
+        onSelectNodeId?.(nodeId);
+        fitToNodeIds(cy, getDependencyClusterNodeIds(graph, nodeId));
+        return;
+      }
+
+      onSelectNodeId?.(selectedNodeIdRef.current === nodeId ? undefined : nodeId);
     });
     cy.on("tap", (event) => {
       if (event.target === cy) {
+        lastTappedNodeId = undefined;
         onSelectNodeId?.(undefined);
       }
     });
@@ -207,8 +271,10 @@ export function DependencyGraphView({
     const positionBadges = () => {
       const zoom = cy.zoom();
       badgeByNodeId.forEach((badge, id) => {
-        const box = cy.getElementById(id).renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+        const node = cy.getElementById(id);
+        const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
         badge.style.transform = `translate(${box.x1 + 7 * zoom}px, ${box.y1 + 7 * zoom}px) scale(${zoom})`;
+        badge.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
       });
     };
 
@@ -257,12 +323,33 @@ export function DependencyGraphView({
       return;
     }
 
+    const hasActiveCluster = Boolean(activeClusterNodeIds && activeClusterNodeIds.size > 0);
+
     cy.batch(() => {
       cy.nodes().forEach((node) => {
         node.data("selected", node.id() === selectedNodeId ? "true" : "false");
+        if (node.data("card") === "true") {
+          node.data(
+            "cluster",
+            hasActiveCluster ? (activeClusterNodeIds?.has(node.id()) ? "active" : "dimmed") : "none"
+          );
+        }
+      });
+
+      cy.edges().forEach((edge) => {
+        edge.data(
+          "cluster",
+          hasActiveCluster &&
+            activeClusterNodeIds?.has(edge.source().id()) &&
+            activeClusterNodeIds.has(edge.target().id())
+            ? "active"
+            : hasActiveCluster
+              ? "dimmed"
+              : "none"
+        );
       });
     });
-  }, [graph, selectedNodeId]);
+  }, [activeClusterNodeIds, graph, selectedNodeId]);
 
   if (graph.nodes.length === 0) {
     return (
@@ -278,6 +365,21 @@ export function DependencyGraphView({
       <div className="node-overlay" ref={overlayRef} />
     </div>
   );
+}
+
+function fitToNodeIds(cy: cytoscape.Core, nodeIds: ReadonlySet<string>) {
+  let collection = cy.collection();
+
+  for (const nodeId of nodeIds) {
+    const node = cy.getElementById(nodeId);
+    if (node.nonempty()) {
+      collection = collection.union(node);
+    }
+  }
+
+  if (collection.nonempty()) {
+    cy.fit(collection, 64);
+  }
 }
 
 function getLayout(layoutMode: "dag" | "grouped"): cytoscape.LayoutOptions {
