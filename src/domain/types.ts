@@ -36,3 +36,20 @@ export interface AdrReferenceEdge {
   code: string;
   number: string;
 }
+
+export type ParseWarningKind =
+  | "dangling-reference"
+  | "disconnected-card"
+  | "invalid-parent"
+  | "malformed-reference"
+  | "missing-blocked-by";
+
+export interface ParseWarning {
+  kind: ParseWarningKind;
+  cardNumber: number;
+  cardTitle: string;
+  cardUrl?: string;
+  message: string;
+  reference?: string;
+  referencedNumber?: number;
+}

@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
+import { lintCards } from "./domain/linter";
 import { buildPrdGroups } from "./domain/prdGroups";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { filterVisibleGraph } from "./domain/visibleGraph";
 import { adrDocuments, cards, fetchedAt, sourceRepo } from "./data/cards.generated";
 import type { ResolvedAdrReference } from "./domain/adr";
+import type { ParseWarning } from "./domain/types";
 
 const graph = buildDependencyGraph(cards);
+const lintWarnings = lintCards(cards);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const cardByNumber = new Map(cards.map((card) => [card.number, card]));
 const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
@@ -53,7 +56,7 @@ export function App() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-5 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-medium text-slate-500">Agents 团队驾驶舱</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
+            <h1 className="mt-1 whitespace-nowrap text-2xl font-semibold tracking-normal text-slate-950">
               按 PRD 分组
             </h1>
           </div>
@@ -99,8 +102,9 @@ export function App() {
                 {refreshLabel}
               </button>
             </div>
-            <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-6">
+            <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-7">
               <Metric label="repo" value={sourceRepo} />
+              <Metric label="Linter" value={String(lintWarnings.length)} />
               <Metric label="分组" value={String(prdGroups.length)} />
               <Metric label="卡片" value={String(visibleGraph.nodes.length)} />
               <Metric label="依赖边" value={String(visibleGraph.edges.length)} />
@@ -132,6 +136,7 @@ export function App() {
             node={selectedNode}
             sourceRepo={sourceRepo}
           />
+          <LinterPanel warnings={lintWarnings} />
 
           <h2 className="text-base font-semibold">阶段图例</h2>
           <div className="mt-3 grid grid-cols-1 gap-2">
@@ -226,6 +231,74 @@ function Metric({ label, value }: { label: string; value: string }) {
       <dd className="truncate text-sm font-medium text-slate-900">{value}</dd>
     </div>
   );
+}
+
+function LinterPanel({ warnings }: { warnings: ParseWarning[] }) {
+  return (
+    <section className="mb-5 border-b border-slate-200 pb-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">Linter 告警</h2>
+        <span className="rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          {warnings.length}
+        </span>
+      </div>
+      {warnings.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">暂无解析告警</p>
+      ) : (
+        <ul className="mt-3 max-h-60 space-y-2 overflow-auto pr-1">
+          {warnings.map((warning, index) => (
+            <li
+              className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-slate-800"
+              key={`${warning.kind}-${warning.cardNumber}-${warning.reference ?? warning.referencedNumber ?? index}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+                  {warningLabelByKind[warning.kind]}
+                </span>
+                {warning.cardUrl ? (
+                  <a
+                    className="shrink-0 text-xs font-semibold text-sky-700 hover:text-sky-900"
+                    href={warning.cardUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    #{warning.cardNumber}
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-xs font-semibold text-slate-600">#{warning.cardNumber}</span>
+                )}
+              </div>
+              <p className="mt-2 font-medium text-slate-900">{warning.cardTitle}</p>
+              <p className="mt-1 text-slate-600">{describeWarning(warning)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const warningLabelByKind: Record<ParseWarning["kind"], string> = {
+  "dangling-reference": "悬空引用",
+  "disconnected-card": "连不上线",
+  "invalid-parent": "Parent 格式",
+  "malformed-reference": "引用格式",
+  "missing-blocked-by": "缺 Blocked by"
+};
+
+function describeWarning(warning: ParseWarning): string {
+  switch (warning.kind) {
+    case "dangling-reference":
+      return `这张卡写了被 #${warning.referencedNumber} 挡住，但当前数据里没有这张卡。`;
+    case "disconnected-card":
+      return "这张卡没有 Parent、Blocked by 或 ADR，看起来没接到主链路上。";
+    case "invalid-parent":
+      return "这张卡有 Parent 段，但里面没有能解析的 #数字。";
+    case "malformed-reference":
+      return `${warning.reference} 格式不对，ADR 应该写成 ADR-NNNN。`;
+    case "missing-blocked-by":
+      return "这张 TB 卡没有 Blocked by 段；没有前置也建议写 None。";
+  }
 }
 
 function NodeDetails({
