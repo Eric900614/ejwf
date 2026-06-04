@@ -34,7 +34,7 @@ describe("buildDependencyGraphElements", () => {
       },
       {
         id: "2",
-        label: "#2\n项目骨架",
+        label: "项目骨架",
         ready: "false",
         selected: "false",
         stage: "triage",
@@ -44,7 +44,7 @@ describe("buildDependencyGraphElements", () => {
       },
       {
         id: "6",
-        label: "#6\n按 PRD 分组视图",
+        label: "按 PRD 分组视图",
         ready: "false",
         selected: "false",
         stage: "triage",
@@ -75,7 +75,7 @@ describe("buildDependencyGraphElements", () => {
     expect(buildDependencyGraphElements(graph).map((element) => element.data)).toEqual([
       {
         id: "2",
-        label: "#2\n已完成前置",
+        label: "已完成前置",
         ready: "false",
         selected: "false",
         stage: "done",

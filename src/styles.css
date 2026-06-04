@@ -1,22 +1,50 @@
 @import "tailwindcss";
 
-/* `static` forces Tailwind to always emit these custom properties to :root,
-   even though no utility class references them — the graph (cytoscape, via
-   getComputedStyle) and the UI both read them as the single source of stage
-   colors (ADR-0004). Without `static` they get tree-shaken out of the build. */
+/* Design tokens — the single source for both the graph (cytoscape, read via
+   getComputedStyle) and the UI (Tailwind utilities). `static` forces Tailwind to
+   always emit these custom properties to :root even when no utility class
+   references them, so cytoscape can resolve them; without it they'd be
+   tree-shaken out of the build (ADR-0004). */
 @theme static {
+  /* Stage indicator colors — tuned to read as glowing indicator lights on the
+     dark console while keeping each stage's hue
+     (待打理 / 待开发 / 开发审查中 / 待我验收 / 完成). */
   --color-stage-triage: #f59e0b;
-  --color-stage-ready: #2563eb;
-  --color-stage-review: #7c3aed;
-  --color-stage-acceptance: #db2777;
-  --color-stage-done: #16a34a;
+  --color-stage-ready: #3b82f6;
+  --color-stage-review: #a855f7;
+  --color-stage-acceptance: #ec4899;
+  --color-stage-done: #22c55e;
 
-  /* Readiness / dependency-edge semantics (ADR-0004: 金圈=就绪可派,
-     绿=依赖已就位/已满足, 仍被挡=默认边色). Single source for both the graph
-     (cytoscape) and the UI legend. */
-  --color-ready: #facc15;
-  --color-dep-satisfied: #16a34a;
-  --color-dep-blocking: #64748b;
+  /* Darkened, stage-tinted node fills: the node body shows its stage as a deep
+     tint on the dark console while the bright stage color above rides the border
+     as a crisp edge — a refined "instrument chip" instead of a flat bright box. */
+  --color-stage-triage-surface: #46330f;
+  --color-stage-ready-surface: #17284a;
+  --color-stage-review-surface: #2d1c49;
+  --color-stage-acceptance-surface: #45192f;
+  --color-stage-done-surface: #133d20;
+
+  /* Readiness / dependency-edge semantics (金圈=就绪可派, 绿=依赖已就位/已满足,
+     仍被挡=默认边色). Single source for both the graph and the UI legend. */
+  --color-ready: #fbbf24;
+  --color-dep-satisfied: #34d399;
+  --color-dep-blocking: #6b7a90;
+
+  /* Console surfaces & text — the dark "mission-control" palette. */
+  --color-console-bg: #080b12;
+  --color-console-panel: #0f1521;
+  --color-console-elevated: #161d2c;
+  --color-console-border: #222b3d;
+  --color-console-border-strong: #33405c;
+  --color-console-text: #e7ecf5;
+  --color-console-muted: #93a1b8;
+  --color-console-dim: #5d6a83;
+  --color-console-accent: #38bdf8;
+
+  /* Distinctive typography without any network fetch (大陆离线): a telemetry
+     monospace for IDs / metrics / codes, a system CJK-friendly sans for body. */
+  --font-sans: "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
 }
 
 html,
@@ -27,4 +55,54 @@ body,
 
 body {
   margin: 0;
+  background-color: var(--color-console-bg);
+  color: var(--color-console-text);
+  font-family: var(--font-sans);
+}
+
+/* Thin, dark scrollbars so internally-scrolling panels fit the console. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-console-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-console-border-strong);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* #N corner badges drawn over the graph canvas (see DependencyGraphView): a
+   compact monospace chip, positioned + scaled from each node's rendered box. */
+.node-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.node-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  padding: 2px 5px;
+  border: 1px solid var(--color-console-border-strong);
+  border-radius: 4px;
+  background: rgba(8, 11, 18, 0.72);
+  color: var(--color-console-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }

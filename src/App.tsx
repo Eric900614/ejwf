@@ -1,4 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Gauge,
+  LayoutGrid,
+  List,
+  Network,
+  Palette,
+  RefreshCw,
+  X
+} from "lucide-react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { lintCards } from "./domain/linter";
@@ -6,23 +19,29 @@ import { buildPrdGroups } from "./domain/prdGroups";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { filterVisibleGraph } from "./domain/visibleGraph";
 import { adrDocuments, cards, fetchedAt, sourceRepo } from "./data/cards.generated";
+import type { Card, ParseWarning } from "./domain/types";
 import type { ResolvedAdrReference } from "./domain/adr";
-import type { ParseWarning } from "./domain/types";
 
 const graph = buildDependencyGraph(cards);
 const lintWarnings = lintCards(cards);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const cardByNumber = new Map(cards.map((card) => [card.number, card]));
 const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
-const defaultSelectedNodeId =
-  graph.nodes.find((node) => node.relations.adrReferences.length > 0)?.id ?? graph.nodes[0]?.id;
 const fetchedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString("zh-CN") : "尚未拉取";
+const stageColorById = Object.fromEntries(
+  stageDefinitions.map((stage) => [stage.id, stage.color])
+) as Record<(typeof stageDefinitions)[number]["id"], string>;
+
+type SidebarTab = "list" | "linter" | "legend";
 
 export function App() {
-  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(defaultSelectedNodeId);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined);
   const [viewMode, setViewMode] = useState<"prd" | "dag">("prd");
   const [showClosedCards, setShowClosedCards] = useState(false);
   const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("list");
+  const [wheelSensitivity, setWheelSensitivity] = useState(0.3);
+
   // Memoize so the filtered graph and groups keep a stable identity across
   // renders that don't toggle showClosedCards — otherwise every node tap hands
   // DependencyGraphView fresh graph/groups props and forces a full cytoscape
@@ -32,7 +51,7 @@ export function App() {
   const selectedNode = visibleGraph.nodes.find((node) => node.id === selectedNodeId);
   const visibleCards = visibleGraph.nodes.map((node) => node.card);
   const hiddenClosedCount = graph.nodes.length - visibleGraph.nodes.length;
-  const refreshLabel = refreshState === "refreshing" ? "刷新中" : "手动刷新";
+  const readyCount = visibleGraph.nodes.filter((node) => node.isReady).length;
 
   async function refreshFromGitHub() {
     setRefreshState("refreshing");
@@ -51,230 +70,330 @@ export function App() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">Agents 团队驾驶舱</p>
-            <h1 className="mt-1 whitespace-nowrap text-2xl font-semibold tracking-normal text-slate-950">
-              按 PRD 分组
-            </h1>
+    <main className="flex min-h-screen flex-col bg-console-bg text-console-text lg:h-screen lg:min-h-0 lg:overflow-hidden">
+      <header className="shrink-0 border-b border-console-border bg-console-panel">
+        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-5 w-5 text-console-accent" aria-hidden="true" />
+            <span className="text-sm font-semibold tracking-wide">驾驶舱</span>
+            <span className="font-mono text-xs text-console-dim">{sourceRepo}</span>
           </div>
-          <div className="flex flex-col gap-3 md:items-end">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <div
-                aria-label="视图切换"
-                className="inline-grid grid-cols-2 rounded border border-slate-200 bg-slate-100 p-1 text-sm"
-                role="group"
-              >
-                <button
-                  aria-pressed={viewMode === "prd"}
-                  className={viewMode === "prd" ? activeViewButtonClass : inactiveViewButtonClass}
-                  onClick={() => setViewMode("prd")}
-                  type="button"
-                >
-                  按 PRD 分组
-                </button>
-                <button
-                  aria-pressed={viewMode === "dag"}
-                  className={viewMode === "dag" ? activeViewButtonClass : inactiveViewButtonClass}
-                  onClick={() => setViewMode("dag")}
-                  type="button"
-                >
-                  依赖图
-                </button>
-              </div>
-              <label className="flex h-9 items-center gap-2 rounded border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
-                <input
-                  checked={showClosedCards}
-                  className="h-4 w-4 accent-slate-900"
-                  onChange={(event) => setShowClosedCards(event.target.checked)}
-                  type="checkbox"
-                />
-                显示已关闭卡
-              </label>
-              <button
-                className="h-9 rounded border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-700 disabled:cursor-wait disabled:opacity-60"
-                disabled={refreshState === "refreshing"}
-                onClick={refreshFromGitHub}
-                type="button"
-              >
-                {refreshLabel}
-              </button>
-            </div>
-            <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-7">
-              <Metric label="repo" value={sourceRepo} />
-              <Metric label="Linter" value={String(lintWarnings.length)} />
-              <Metric label="分组" value={String(prdGroups.length)} />
-              <Metric label="卡片" value={String(visibleGraph.nodes.length)} />
-              <Metric label="依赖边" value={String(visibleGraph.edges.length)} />
-              <Metric label="就绪" value={String(visibleGraph.nodes.filter((node) => node.isReady).length)} />
-              <Metric label="拉取时间" value={fetchedLabel} />
-            </dl>
+
+          <div
+            aria-label="视图切换"
+            className="flex items-center rounded-md border border-console-border bg-console-bg p-0.5"
+            role="group"
+          >
+            <SegmentButton
+              active={viewMode === "prd"}
+              icon={LayoutGrid}
+              label="PRD"
+              onClick={() => setViewMode("prd")}
+              title="按 PRD 分组"
+            />
+            <SegmentButton
+              active={viewMode === "dag"}
+              icon={Network}
+              label="DAG"
+              onClick={() => setViewMode("dag")}
+              title="依赖图"
+            />
+          </div>
+
+          <button
+            aria-pressed={showClosedCards}
+            className={
+              showClosedCards
+                ? "flex h-8 items-center gap-1.5 rounded-md border border-console-accent/40 bg-console-accent/10 px-2.5 text-xs font-medium text-console-accent"
+                : "flex h-8 items-center gap-1.5 rounded-md border border-console-border bg-console-bg px-2.5 text-xs font-medium text-console-muted transition hover:text-console-text"
+            }
+            onClick={() => setShowClosedCards((value) => !value)}
+            title="显示已关闭卡"
+            type="button"
+          >
+            {showClosedCards ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            <span className="hidden sm:inline">已关闭</span>
+          </button>
+
+          <button
+            className="flex h-8 items-center gap-1.5 rounded-md border border-console-border bg-console-bg px-2.5 text-xs font-medium text-console-muted transition hover:text-console-text disabled:cursor-wait disabled:opacity-60"
+            disabled={refreshState === "refreshing"}
+            onClick={refreshFromGitHub}
+            title={refreshState === "failed" ? "刷新失败，确认 gh 已登录后重试" : "手动刷新"}
+            type="button"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshState === "refreshing" ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{refreshState === "failed" ? "重试" : "刷新"}</span>
+          </button>
+
+          <label className="flex items-center gap-1.5 text-xs text-console-muted" title="滚轮缩放灵敏度">
+            <span className="hidden md:inline">灵敏度</span>
+            <input
+              aria-label="滚轮缩放灵敏度"
+              className="h-1 w-20 cursor-pointer accent-console-accent"
+              max={1}
+              min={0.05}
+              onChange={(event) => setWheelSensitivity(Number(event.target.value))}
+              step={0.05}
+              type="range"
+              value={wheelSensitivity}
+            />
+          </label>
+
+          <div className="ml-auto flex items-center gap-3 font-mono text-xs">
+            <Telemetry label="卡片" value={visibleGraph.nodes.length} />
+            <Telemetry label="就绪" tone="ready" value={readyCount} />
+            <Telemetry label="依赖边" value={visibleGraph.edges.length} />
+            <Telemetry label="Linter" tone={lintWarnings.length > 0 ? "warn" : undefined} value={lintWarnings.length} />
+            <span className="hidden text-console-dim xl:inline">{fetchedLabel}</span>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-h-[560px] self-start overflow-auto rounded border border-slate-200 bg-white">
-          <DependencyGraphView
-            graph={visibleGraph}
-            groups={viewMode === "prd" ? prdGroups : undefined}
-            layoutMode={viewMode === "prd" ? "grouped" : "dag"}
-            onSelectNodeId={setSelectedNodeId}
-            selectedNodeId={selectedNodeId}
-          />
-          <div className="border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
-            默认隐藏已关闭卡。没有箭头通常表示前置已完成并被隐藏；打开“显示已关闭卡”可看完整链路。
+      <div className="grid w-full flex-1 gap-3 p-3 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="relative flex min-h-[560px] flex-col overflow-hidden rounded-lg border border-console-border bg-console-bg lg:min-h-0">
+          <div className="min-h-0 flex-1">
+            <DependencyGraphView
+              graph={visibleGraph}
+              groups={viewMode === "prd" ? prdGroups : undefined}
+              layoutMode={viewMode === "prd" ? "grouped" : "dag"}
+              onSelectNodeId={setSelectedNodeId}
+              selectedNodeId={selectedNodeId}
+              wheelSensitivity={wheelSensitivity}
+            />
+          </div>
+          <div className="shrink-0 border-t border-console-border px-4 py-2 text-xs text-console-dim">
+            默认隐藏已关闭卡。没有箭头通常表示前置已完成并被隐藏；打开“已关闭”可看完整链路。
             {hiddenClosedCount > 0 && !showClosedCards ? ` 当前隐藏 ${hiddenClosedCount} 张已关闭卡。` : ""}
             {refreshState === "failed" ? " 刷新失败，请确认本机 gh 已登录后重试。" : ""}
           </div>
+
+          {selectedNode ? (
+            <FloatingDetails
+              adrDocumentByCode={adrDocumentByCode}
+              node={selectedNode}
+              onClose={() => setSelectedNodeId(undefined)}
+              sourceRepo={sourceRepo}
+            />
+          ) : null}
         </div>
-        <aside className="rounded border border-slate-200 bg-white p-4">
-          <NodeDetails
-            adrDocumentByCode={adrDocumentByCode}
-            node={selectedNode}
-            sourceRepo={sourceRepo}
-          />
-          <LinterPanel warnings={lintWarnings} />
 
-          <h2 className="text-base font-semibold">阶段图例</h2>
-          <div className="mt-3 grid grid-cols-1 gap-2">
-            {stageDefinitions.map((stage) => (
-              <div className="flex items-center gap-2 text-sm text-slate-700" key={stage.id}>
-                <span
-                  aria-hidden="true"
-                  className="h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: stage.color }}
-                />
-                <span>{stage.label}</span>
-              </div>
-            ))}
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-console-border bg-console-panel">
+          <div className="flex shrink-0 border-b border-console-border" role="tablist">
+            <TabButton
+              active={sidebarTab === "list"}
+              icon={List}
+              label="列表"
+              onClick={() => setSidebarTab("list")}
+            />
+            <TabButton
+              active={sidebarTab === "linter"}
+              badge={lintWarnings.length || undefined}
+              icon={AlertTriangle}
+              label="Linter"
+              onClick={() => setSidebarTab("linter")}
+            />
+            <TabButton
+              active={sidebarTab === "legend"}
+              icon={Palette}
+              label="图例"
+              onClick={() => setSidebarTab("legend")}
+            />
           </div>
 
-          <h2 className="mt-5 text-base font-semibold">箭头图例</h2>
-          <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
-            <div className="flex items-center gap-2">
-              <span
-                className="h-0 w-8 border-t-2"
-                style={{ borderColor: "var(--color-dep-blocking)" }}
-                aria-hidden="true"
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {sidebarTab === "list" ? (
+              <CardList
+                cards={visibleCards}
+                onSelect={setSelectedNodeId}
+                selectedNodeId={selectedNodeId}
               />
-              <span>仍在阻塞</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span
-                className="h-0 w-8 border-t-2 border-dashed"
-                style={{ borderColor: "var(--color-dep-satisfied)" }}
-                aria-hidden="true"
-              />
-              <span>已满足</span>
-            </div>
-          </div>
-
-          <h2 className="mt-5 text-base font-semibold">卡片列表</h2>
-          <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
-            {visibleCards.map((card) => (
-              <a
-                className={
-                  card.state === "CLOSED"
-                    ? "block rounded border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 hover:border-sky-400 hover:bg-sky-50"
-                    : "block rounded border border-slate-200 px-3 py-2 text-sm hover:border-sky-400 hover:bg-sky-50"
-                }
-                href={card.url}
-                key={card.number}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <span className="flex items-start gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: stageColorById[deriveCardStage(card)] }}
-                  />
-                  <span className="min-w-0">
-                    <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
-                    <span className="text-slate-900">{card.title}</span>
-                    {card.state === "CLOSED" ? (
-                      <span className="ml-2 inline-block rounded-sm bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-600">
-                        已关闭
-                      </span>
-                    ) : null}
-                    {readyByCardNumber.get(card.number) ? (
-                      <span className="ml-2 inline-block rounded-sm bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
-                        就绪
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-              </a>
-            ))}
+            ) : null}
+            {sidebarTab === "linter" ? <LinterPanel warnings={lintWarnings} /> : null}
+            {sidebarTab === "legend" ? <Legend /> : null}
           </div>
         </aside>
-      </section>
+      </div>
     </main>
   );
 }
 
-const stageColorById = Object.fromEntries(
-  stageDefinitions.map((stage) => [stage.id, stage.color])
-) as Record<(typeof stageDefinitions)[number]["id"], string>;
-const activeViewButtonClass =
-  "rounded-sm bg-white px-3 py-1.5 font-semibold text-slate-950 shadow-sm";
-const inactiveViewButtonClass =
-  "rounded-sm px-3 py-1.5 font-medium text-slate-600 hover:bg-white/70 hover:text-slate-950";
-
-function Metric({ label, value }: { label: string; value: string }) {
+function SegmentButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+  title
+}: {
+  active: boolean;
+  icon: typeof LayoutGrid;
+  label: string;
+  onClick: () => void;
+  title: string;
+}) {
   return (
-    <div className="min-w-0 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="truncate text-sm font-medium text-slate-900">{value}</dd>
+    <button
+      aria-pressed={active}
+      className={
+        active
+          ? "flex items-center gap-1.5 rounded bg-console-accent/15 px-2.5 py-1 text-xs font-semibold text-console-accent"
+          : "flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-console-muted transition hover:text-console-text"
+      }
+      onClick={onClick}
+      title={title}
+      type="button"
+    >
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function Telemetry({ label, value, tone }: { label: string; value: number; tone?: "ready" | "warn" }) {
+  const valueClass =
+    tone === "ready" ? "text-ready" : tone === "warn" ? "text-amber-400" : "text-console-text";
+
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="text-console-dim">{label}</span>
+      <span className={`text-sm font-semibold tabular-nums ${valueClass}`}>{value}</span>
+    </span>
+  );
+}
+
+function TabButton({
+  active,
+  badge,
+  icon: Icon,
+  label,
+  onClick
+}: {
+  active: boolean;
+  badge?: number;
+  icon: typeof List;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-selected={active}
+      className={
+        active
+          ? "flex flex-1 items-center justify-center gap-1.5 border-b-2 border-console-accent px-3 py-2.5 text-xs font-semibold text-console-text"
+          : "flex flex-1 items-center justify-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-console-muted transition hover:text-console-text"
+      }
+      onClick={onClick}
+      role="tab"
+      type="button"
+    >
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+      {badge ? (
+        <span className="rounded bg-amber-400/15 px-1.5 text-[10px] font-semibold text-amber-300">{badge}</span>
+      ) : null}
+    </button>
+  );
+}
+
+function CardList({
+  cards,
+  onSelect,
+  selectedNodeId
+}: {
+  cards: Card[];
+  onSelect: (nodeId: string) => void;
+  selectedNodeId?: string;
+}) {
+  if (cards.length === 0) {
+    return <p className="text-xs text-console-dim">没有可显示的卡片。</p>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {cards.map((card) => {
+        const stage = deriveCardStage(card);
+        const selected = String(card.number) === selectedNodeId;
+
+        return (
+          <button
+            className={
+              (selected
+                ? "border-console-accent/50 bg-console-accent/10"
+                : "border-console-border bg-console-bg hover:border-console-border-strong") +
+              (card.state === "CLOSED" ? " opacity-60" : "") +
+              " flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition"
+            }
+            key={card.number}
+            onClick={() => onSelect(String(card.number))}
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: stageColorById[stage] }}
+            />
+            <span className="min-w-0">
+              <span className="font-mono text-console-dim">#{card.number}</span>{" "}
+              <span className="text-console-text">{card.title}</span>
+              {card.state === "CLOSED" ? (
+                <span className="ml-1.5 inline-block rounded bg-console-elevated px-1 text-[10px] text-console-dim">
+                  已关闭
+                </span>
+              ) : null}
+              {readyByCardNumber.get(card.number) ? (
+                <span className="ml-1.5 inline-block rounded bg-ready/15 px-1 text-[10px] font-semibold text-ready">
+                  就绪
+                </span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function LinterPanel({ warnings }: { warnings: ParseWarning[] }) {
+function Legend() {
   return (
-    <section className="mb-5 border-b border-slate-200 pb-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">Linter 告警</h2>
-        <span className="rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-          {warnings.length}
-        </span>
-      </div>
-      {warnings.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">暂无解析告警</p>
-      ) : (
-        <ul className="mt-3 max-h-60 space-y-2 overflow-auto pr-1">
-          {warnings.map((warning, index) => (
-            <li
-              className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-slate-800"
-              key={`${warning.kind}-${warning.cardNumber}-${warning.reference ?? warning.referencedNumber ?? index}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
-                  {warningLabelByKind[warning.kind]}
-                </span>
-                {warning.cardUrl ? (
-                  <a
-                    className="shrink-0 text-xs font-semibold text-sky-700 hover:text-sky-900"
-                    href={warning.cardUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    #{warning.cardNumber}
-                  </a>
-                ) : (
-                  <span className="shrink-0 text-xs font-semibold text-slate-600">#{warning.cardNumber}</span>
-                )}
-              </div>
-              <p className="mt-2 font-medium text-slate-900">{warning.cardTitle}</p>
-              <p className="mt-1 text-slate-600">{describeWarning(warning)}</p>
-            </li>
+    <div className="space-y-5">
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-console-dim">阶段</p>
+        <div className="mt-2 space-y-1.5">
+          {stageDefinitions.map((stage) => (
+            <div className="flex items-center gap-2 text-xs text-console-muted" key={stage.id}>
+              <span aria-hidden="true" className="h-3 w-3 rounded-sm" style={{ backgroundColor: stage.color }} />
+              <span>{stage.label}</span>
+            </div>
           ))}
-        </ul>
-      )}
-    </section>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-console-dim">圈 / 箭头</p>
+        <div className="mt-2 space-y-1.5 text-xs text-console-muted">
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-3.5 rounded-full border-2"
+              style={{ borderColor: "var(--color-ready)" }}
+            />
+            <span>金圈 = 就绪可派</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true" className="h-0 w-8 border-t-2" style={{ borderColor: "var(--color-dep-blocking)" }} />
+            <span>仍在阻塞</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="h-0 w-8 border-t-2 border-dashed"
+              style={{ borderColor: "var(--color-dep-satisfied)" }}
+            />
+            <span>已满足（指向已关闭前置）</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -301,24 +420,54 @@ function describeWarning(warning: ParseWarning): string {
   }
 }
 
-function NodeDetails({
+function LinterPanel({ warnings }: { warnings: ParseWarning[] }) {
+  if (warnings.length === 0) {
+    return <p className="text-xs text-console-dim">暂无解析告警 ✓</p>;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {warnings.map((warning, index) => (
+        <li
+          className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs"
+          key={`${warning.kind}-${warning.cardNumber}-${warning.reference ?? warning.referencedNumber ?? index}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+              {warningLabelByKind[warning.kind]}
+            </span>
+            {warning.cardUrl ? (
+              <a
+                className="font-mono text-[11px] text-console-accent hover:underline"
+                href={warning.cardUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                #{warning.cardNumber}
+              </a>
+            ) : (
+              <span className="font-mono text-[11px] text-console-dim">#{warning.cardNumber}</span>
+            )}
+          </div>
+          <p className="mt-1.5 font-medium text-console-text">{warning.cardTitle}</p>
+          <p className="mt-0.5 text-console-muted">{describeWarning(warning)}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FloatingDetails({
   adrDocumentByCode,
   node,
+  onClose,
   sourceRepo
 }: {
   adrDocumentByCode: Map<string, ResolvedAdrReference>;
-  node?: GraphNode;
+  node: GraphNode;
+  onClose: () => void;
   sourceRepo: string;
 }) {
-  if (!node) {
-    return (
-      <section className="mb-5 border-b border-slate-200 pb-5">
-        <h2 className="text-base font-semibold">节点详情</h2>
-        <p className="mt-2 text-sm text-slate-500">未选中节点</p>
-      </section>
-    );
-  }
-
   const labels = node.card.labels?.map((label) => label.name) ?? [];
   const pullRequests = node.card.associatedPullRequests ?? [];
   const parentPrd = node.relations.parentPrd;
@@ -327,46 +476,86 @@ function NodeDetails({
     parentCard?.url ?? (parentPrd ? `https://github.com/${sourceRepo}/issues/${parentPrd.parentNumber}` : undefined);
 
   return (
-    <section className="mb-5 border-b border-slate-200 pb-5">
-      <h2 className="text-base font-semibold">节点详情</h2>
-      <div className="mt-3 space-y-3 text-sm text-slate-700">
-        <div>
-          <p className="font-semibold text-slate-900">
-            #{node.card.number} {node.card.title}
-          </p>
-          {node.isReady ? <p className="mt-1 font-medium text-yellow-700">就绪</p> : null}
+    <div className="absolute right-3 top-3 z-10 flex max-h-[calc(100%-1.5rem)] w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border border-console-border-strong bg-console-panel/95 shadow-2xl shadow-black/50 backdrop-blur-md">
+      <div className="flex items-start justify-between gap-2 border-b border-console-border px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-console-dim">#{node.card.number}</span>
+            {node.isReady ? (
+              <span className="rounded bg-ready/15 px-1.5 py-0.5 text-[10px] font-semibold text-ready">就绪</span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm font-semibold leading-snug text-console-text">{node.card.title}</p>
         </div>
+        <button
+          className="shrink-0 rounded p-1 text-console-muted transition hover:bg-console-elevated hover:text-console-text"
+          onClick={onClose}
+          title="关闭"
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        <DetailRow label="标签" value={labels.length > 0 ? labels.join(" / ") : "无"} />
-        <DetailRow
-          label="关联 PR"
-          value={
-            pullRequests.length > 0
-              ? pullRequests.map((pullRequest) => `#${pullRequest.number} ${pullRequest.state}`).join(" / ")
-              : "无"
-          }
-        />
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
+        {node.card.url ? (
+          <a
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-console-accent hover:underline"
+            href={node.card.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> 在 GitHub 打开
+          </a>
+        ) : null}
 
-        <div>
-          <p className="text-xs font-medium uppercase text-slate-500">归属 PRD</p>
+        <Field label="标签">
+          {labels.length > 0 ? (
+            <span className="flex flex-wrap gap-1">
+              {labels.map((label) => (
+                <span
+                  className="rounded bg-console-elevated px-1.5 py-0.5 font-mono text-[11px] text-console-muted"
+                  key={label}
+                >
+                  {label}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="text-console-dim">无</span>
+          )}
+        </Field>
+
+        <Field label="关联 PR">
+          {pullRequests.length > 0 ? (
+            <span className="flex flex-wrap gap-1">
+              {pullRequests.map((pullRequest) => (
+                <span
+                  className="rounded bg-console-elevated px-1.5 py-0.5 font-mono text-[11px] text-console-muted"
+                  key={pullRequest.number}
+                >
+                  #{pullRequest.number} {pullRequest.state}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="text-console-dim">无</span>
+          )}
+        </Field>
+
+        <Field label="归属 PRD">
           {parentPrd && parentUrl ? (
-            <a
-              className="mt-1 inline-block text-sky-700 hover:text-sky-900"
-              href={parentUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
+            <a className="text-console-accent hover:underline" href={parentUrl} rel="noreferrer" target="_blank">
               #{parentPrd.parentNumber} {parentPrd.title ?? parentCard?.title ?? "PRD"}
             </a>
           ) : (
-            <p className="mt-1 text-slate-500">无</p>
+            <span className="text-console-dim">无</span>
           )}
-        </div>
+        </Field>
 
-        <div>
-          <p className="text-xs font-medium uppercase text-slate-500">引用 ADR</p>
+        <Field label="引用 ADR">
           {node.relations.adrReferences.length > 0 ? (
-            <ul className="mt-1 space-y-1">
+            <ul className="space-y-1">
               {node.relations.adrReferences.map((reference) => {
                 const document = adrDocumentByCode.get(reference.code);
 
@@ -374,16 +563,16 @@ function NodeDetails({
                   <li key={reference.code}>
                     {document?.url ? (
                       <a
-                        className="text-sky-700 hover:text-sky-900"
+                        className="text-console-accent hover:underline"
                         href={document.url}
                         rel="noreferrer"
                         target="_blank"
                       >
-                        {reference.code} — {document.title}
+                        <span className="font-mono">{reference.code}</span> — {document.title}
                       </a>
                     ) : (
                       <span>
-                        {reference.code}
+                        <span className="font-mono">{reference.code}</span>
                         {document?.title ? ` — ${document.title}` : ""}
                       </span>
                     )}
@@ -392,19 +581,19 @@ function NodeDetails({
               })}
             </ul>
           ) : (
-            <p className="mt-1 text-slate-500">无</p>
+            <span className="text-console-dim">无</span>
           )}
-        </div>
+        </Field>
       </div>
-    </section>
+    </div>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
-      <p className="mt-1 text-slate-700">{value}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-console-dim">{label}</p>
+      <div className="mt-1 text-console-text">{children}</div>
     </div>
   );
 }

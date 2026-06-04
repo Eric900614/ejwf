@@ -32,7 +32,7 @@ export function buildDependencyGraphElements(
     ...graph.nodes.map((node) => ({
       data: {
         id: node.id,
-        label: `#${node.card.number}\n${node.card.title}`,
+        label: node.card.title,
         ready: node.isReady ? "true" : "false",
         selected: node.id === options.selectedNodeId ? "true" : "false",
         stage: node.stage,

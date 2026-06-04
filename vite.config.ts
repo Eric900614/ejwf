@@ -4,6 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type Plugin } from "vite";
 
 export default defineConfig({
+  // Pick an uncommon port so it doesn't collide with other Vite projects, which
+  // all default to 5173. Single source for `npm run dev` and scripts/smoke.ps1.
+  // Change this one line to use a different port.
+  server: { port: 5280 },
   plugins: [react(), tailwindcss(), refreshIssuesPlugin()]
 });
 
