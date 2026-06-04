@@ -78,3 +78,15 @@ export interface StandardPromptLayer {
     handoff: PromptStageCopy;
   };
 }
+
+// 派活要拉起的本机 agent 种类。命令构造器据此选两套 argv 模板之一；
+// 与 AgentCommand 一样是「命令构造器 → Agent 启动器(#32)」的共享契约，故住 types。
+export type DispatchAgent = "claude" | "codex";
+
+// 命令构造器的产物：拉起 agent CLI 的「跑哪个程序 + 一串参数」。
+// 直接喂给启动器的 execFile(file, args, { shell: false })——不拼字符串、不过 shell。
+// cwd / stdin / 进程生命周期不在此结构内，归 Agent 启动器(#32)。
+export interface AgentCommand {
+  file: string;
+  args: string[];
+}
