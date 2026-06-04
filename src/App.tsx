@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ExternalLink,
@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
+import { getDependencyClusterNodeIds } from "./domain/dependencyCluster";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { lintCards } from "./domain/linter";
 import { buildPrdGroups } from "./domain/prdGroups";
@@ -52,6 +53,16 @@ export function App() {
   const visibleCards = visibleGraph.nodes.map((node) => node.card);
   const hiddenClosedCount = graph.nodes.length - visibleGraph.nodes.length;
   const readyCount = visibleGraph.nodes.filter((node) => node.isReady).length;
+  const activeClusterNodeIds = useMemo(
+    () => (selectedNodeId ? getDependencyClusterNodeIds(visibleGraph, selectedNodeId) : undefined),
+    [selectedNodeId, visibleGraph]
+  );
+
+  useEffect(() => {
+    if (selectedNodeId && !visibleGraph.nodes.some((node) => node.id === selectedNodeId)) {
+      setSelectedNodeId(undefined);
+    }
+  }, [selectedNodeId, visibleGraph]);
 
   async function refreshFromGitHub() {
     setRefreshState("refreshing");
@@ -157,6 +168,7 @@ export function App() {
               graph={visibleGraph}
               groups={viewMode === "prd" ? prdGroups : undefined}
               layoutMode={viewMode === "prd" ? "grouped" : "dag"}
+              activeClusterNodeIds={activeClusterNodeIds}
               onSelectNodeId={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
               wheelSensitivity={wheelSensitivity}

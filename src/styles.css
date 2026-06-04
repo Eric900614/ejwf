@@ -48,6 +48,8 @@
   --color-node-closed-surface: #0f141e;
   --color-node-closed-border: #232c3d;
   --color-node-closed-text: #6f7d96;
+  --color-dependency-cluster-focus: #e0f2fe;
+  --color-dependency-cluster-dim: #475569;
 
   /* Distinctive typography without any network fetch (大陆离线): a telemetry
      monospace for IDs / metrics / codes, a system CJK-friendly sans for body. */
