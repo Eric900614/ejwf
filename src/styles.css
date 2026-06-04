@@ -40,6 +40,9 @@
   --color-console-muted: #93a1b8;
   --color-console-dim: #5d6a83;
   --color-console-accent: #38bdf8;
+  --color-pin: #facc15;
+  --color-pin-surface: rgba(250, 204, 21, 0.12);
+  --color-pin-border: rgba(250, 204, 21, 0.5);
 
   /* Graph node primitives consumed by cytoscape. Keep these as tokens so the
      canvas styling does not drift from the rest of the console theme. */
@@ -207,6 +210,17 @@ body {
   height: 13px;
 }
 
+.node-card-pin {
+  display: none;
+  flex: none;
+  color: var(--color-pin);
+}
+
+.node-card-pin svg {
+  width: 13px;
+  height: 13px;
+}
+
 .node-card-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -234,6 +248,18 @@ body {
   box-shadow: 0 0 0 1px var(--color-ready);
 }
 
+.node-card.is-pinned {
+  border-color: var(--color-pin-border);
+  background:
+    linear-gradient(0deg, var(--color-pin-surface), var(--color-pin-surface)),
+    var(--color-console-elevated);
+  box-shadow: 0 0 0 1px var(--color-pin-border);
+}
+
+.node-card.is-pinned .node-card-pin {
+  display: inline-flex;
+}
+
 .node-card.is-cluster-active {
   box-shadow: 0 0 0 1px var(--color-dependency-cluster-focus);
 }
@@ -246,4 +272,30 @@ body {
 
 .node-card.is-dimmed {
   opacity: 0.28;
+}
+
+.pin-menu {
+  position: absolute;
+  z-index: 2;
+  min-width: 92px;
+  overflow: hidden;
+  border: 1px solid var(--color-console-border-strong);
+  border-radius: 6px;
+  background: var(--color-console-panel);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+}
+
+.pin-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  color: var(--color-console-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.pin-menu button:hover {
+  background: var(--color-console-elevated);
+  color: var(--color-pin);
 }
