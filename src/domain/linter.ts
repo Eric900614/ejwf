@@ -59,7 +59,11 @@ export function lintCards(cards: Card[]): ParseWarning[] {
       });
     }
 
-    for (const dependency of dependencies) {
+    // Only open cards have all their blockers fetched (ADR-0003 only pulls
+    // closed blockers of open cards). A closed card whose historical blocker
+    // wasn't fetched is expected, not dangling — graph.ts skips that edge
+    // silently for the same reason, so flagging it here would be noise.
+    for (const dependency of card.state === "OPEN" ? dependencies : []) {
       if (cardNumbers.has(dependency.blockerNumber)) {
         continue;
       }

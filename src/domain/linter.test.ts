@@ -32,6 +32,25 @@ describe("lintCards", () => {
     ]);
   });
 
+  it("does not flag a closed card whose historical blocker wasn't fetched", () => {
+    const cards: Card[] = [
+      {
+        number: 4,
+        title: "TB1-3: done slice",
+        state: "CLOSED",
+        body: "## Parent\n\n#1\n\n## Blocked by\n\n- #2"
+      },
+      {
+        number: 1,
+        title: "PRD: cockpit",
+        state: "OPEN",
+        body: ""
+      }
+    ];
+
+    expect(lintCards(cards)).toEqual([]);
+  });
+
   it("reports a Parent section that has no parseable issue number", () => {
     const cards: Card[] = [
       {
