@@ -84,4 +84,50 @@ describe("buildDependencyGraphElements", () => {
       }
     ]);
   });
+
+  it("只给 open 卡生成龄期文案，closed 卡不显示停滞", () => {
+    const cards: Card[] = [
+      {
+        number: 2,
+        title: "等待维护者验收",
+        state: "OPEN",
+        body: "",
+        updatedAt: "2026-06-01T12:00:00Z"
+      },
+      {
+        number: 3,
+        title: "已完成前置",
+        state: "CLOSED",
+        body: "",
+        updatedAt: "2026-06-01T12:00:00Z"
+      }
+    ];
+    const graph = buildDependencyGraph(cards);
+    const elements = buildDependencyGraphElements(graph, {
+      now: new Date("2026-06-04T12:00:00Z")
+    }).map((element) => element.data);
+
+    expect(elements).toEqual([
+      {
+        id: "2",
+        label: "等待维护者验收",
+        ready: "false",
+        selected: "false",
+        stage: "triage",
+        card: "true",
+        state: "OPEN",
+        stalenessLabel: "3 天没动",
+        stalenessSeverity: "recent"
+      },
+      {
+        id: "3",
+        label: "已完成前置",
+        ready: "false",
+        selected: "false",
+        stage: "done",
+        card: "true",
+        state: "CLOSED"
+      }
+    ]);
+  });
 });

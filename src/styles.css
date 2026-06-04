@@ -51,6 +51,18 @@
   --color-dependency-cluster-focus: #e0f2fe;
   --color-dependency-cluster-dim: #475569;
 
+  /* Staleness severity tiers (龄期越久越红): fresh = muted (not stale, low
+     emphasis), then amber → orange → red so "what's stuck" is scannable. */
+  --color-staleness-recent-text: #fbbf24;
+  --color-staleness-recent-surface: rgba(251, 191, 36, 0.12);
+  --color-staleness-recent-border: rgba(251, 191, 36, 0.34);
+  --color-staleness-stale-text: #fb923c;
+  --color-staleness-stale-surface: rgba(251, 146, 60, 0.13);
+  --color-staleness-stale-border: rgba(251, 146, 60, 0.36);
+  --color-staleness-old-text: #f87171;
+  --color-staleness-old-surface: rgba(248, 113, 113, 0.15);
+  --color-staleness-old-border: rgba(248, 113, 113, 0.42);
+
   /* Distinctive typography without any network fetch (大陆离线): a telemetry
      monospace for IDs / metrics / codes, a system CJK-friendly sans for body. */
   --font-sans: "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
@@ -90,8 +102,9 @@ body {
   background: transparent;
 }
 
-/* #N corner badges drawn over the graph canvas (see DependencyGraphView): a
-   compact monospace chip, positioned + scaled from each node's rendered box. */
+/* The card nodes are HTML cards drawn over the graph canvas (see
+   DependencyGraphView), each positioned + scaled from its node's rendered box so
+   they track pan/zoom. The canvas underneath only carries edges + group boxes. */
 .node-overlay {
   position: absolute;
   inset: 0;
@@ -100,19 +113,137 @@ body {
   z-index: 1;
 }
 
-.node-badge {
+.node-card {
   position: absolute;
   top: 0;
   left: 0;
   transform-origin: top left;
-  padding: 2px 5px;
-  border: 1px solid var(--color-console-border-strong);
-  border-radius: 4px;
-  background: rgba(8, 11, 18, 0.72);
-  color: var(--color-console-text);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-node-border);
+  border-left: 4px solid var(--card-stage, var(--color-node-border));
+  border-radius: 8px;
+  background: var(--color-console-elevated);
+  color: var(--color-node-text);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  transition:
+    opacity 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.node-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.node-card-id {
+  flex: none;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
-  line-height: 1;
+  color: var(--color-console-muted);
+}
+
+.node-card-flags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.node-card-staleness {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px 1px 4px;
+  border: 1px solid var(--color-console-border);
+  border-radius: 9999px;
+  color: var(--color-console-dim);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
+}
+
+.node-card-staleness svg {
+  width: 10px;
+  height: 10px;
+}
+
+.node-card-staleness[data-sev="recent"] {
+  color: var(--color-staleness-recent-text);
+  border-color: var(--color-staleness-recent-border);
+  background: var(--color-staleness-recent-surface);
+}
+
+.node-card-staleness[data-sev="stale"] {
+  color: var(--color-staleness-stale-text);
+  border-color: var(--color-staleness-stale-border);
+  background: var(--color-staleness-stale-surface);
+}
+
+.node-card-staleness[data-sev="old"] {
+  color: var(--color-staleness-old-text);
+  border-color: var(--color-staleness-old-border);
+  background: var(--color-staleness-old-surface);
+}
+
+.node-card-ready {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-ready);
+}
+
+.node-card-ready svg {
+  width: 13px;
+  height: 13px;
+}
+
+.node-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-node-text);
+}
+
+.node-card.is-closed {
+  background: var(--color-node-closed-surface);
+  border-color: var(--color-node-closed-border);
+}
+
+.node-card.is-closed .node-card-id,
+.node-card.is-closed .node-card-title {
+  color: var(--color-node-closed-text);
+}
+
+/* Readiness glow (金圈=就绪可派) is reinforced by the ⚡ in the head row. */
+.node-card.is-ready {
+  box-shadow: 0 0 0 1px var(--color-ready);
+}
+
+.node-card.is-cluster-active {
+  box-shadow: 0 0 0 1px var(--color-dependency-cluster-focus);
+}
+
+/* Selection is the strongest state, so it wins over ready / cluster glows. */
+.node-card.is-selected {
+  border-color: var(--color-console-accent);
+  box-shadow: 0 0 0 1px var(--color-console-accent);
+}
+
+.node-card.is-dimmed {
+  opacity: 0.28;
 }
