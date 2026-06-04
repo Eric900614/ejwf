@@ -1,7 +1,7 @@
 import type cytoscape from "cytoscape";
 import type { DependencyGraph } from "../domain/graph";
 import type { PrdGroup } from "../domain/prdGroups";
-import { formatStaleness } from "../domain/staleness";
+import { describeStaleness } from "../domain/staleness";
 
 interface DependencyGraphElementOptions {
   groups?: PrdGroup[];
@@ -32,22 +32,29 @@ export function buildDependencyGraphElements(
         group: "true"
       }
     })),
-    ...graph.nodes.map((node) => ({
-      data: {
-        id: node.id,
-        label: node.card.title,
-        ready: node.isReady ? "true" : "false",
-        selected: node.id === options.selectedNodeId ? "true" : "false",
-        stage: node.stage,
-        card: "true",
-        state: node.card.state,
-        ...(node.card.state === "OPEN" && node.card.updatedAt
-          ? { stalenessLabel: formatStaleness(node.card.updatedAt, now) }
-          : {}),
-        ...(groupByNodeId.has(node.id) ? { parent: groupByNodeId.get(node.id) } : {})
-      },
-      ...(nodePositionById.has(node.id) ? { position: nodePositionById.get(node.id) } : {})
-    })),
+    ...graph.nodes.map((node) => {
+      const staleness =
+        node.card.state === "OPEN" && node.card.updatedAt
+          ? describeStaleness(node.card.updatedAt, now)
+          : undefined;
+
+      return {
+        data: {
+          id: node.id,
+          label: node.card.title,
+          ready: node.isReady ? "true" : "false",
+          selected: node.id === options.selectedNodeId ? "true" : "false",
+          stage: node.stage,
+          card: "true",
+          state: node.card.state,
+          ...(staleness
+            ? { stalenessLabel: staleness.label, stalenessSeverity: staleness.severity }
+            : {}),
+          ...(groupByNodeId.has(node.id) ? { parent: groupByNodeId.get(node.id) } : {})
+        },
+        ...(nodePositionById.has(node.id) ? { position: nodePositionById.get(node.id) } : {})
+      };
+    }),
     ...graph.edges.map((edge) => ({
       data: {
         id: edge.id,

@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { getDependencyClusterNodeIds } from "../domain/dependencyCluster";
 import type { DependencyGraph } from "../domain/graph";
 import type { PrdGroup } from "../domain/prdGroups";
-import { stageDefinitions } from "../domain/stage";
 import { buildDependencyGraphElements } from "./dependencyGraphElements";
 
 cytoscape.use(dagre);
@@ -12,10 +11,20 @@ cytoscape.use(dagre);
 // Fallback only; the live value is read from the CSS design token.
 const NODE_FONT_FALLBACK = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif';
 
-// Matches the node `opacity` of the `cluster = "dimmed"` style rule so a dimmed
-// card and its #N corner badge (an HTML overlay outside cytoscape's canvas, thus
-// unaffected by node opacity) recede together instead of leaving a bright badge.
-const CLUSTER_DIM_OPACITY = 0.28;
+// Card nodes render as HTML overlays (cytoscape's canvas label can't lay out a
+// number, signal icons and a clamped title together — that fight is what made
+// the old badges collide with the title). cytoscape keeps only an invisible
+// anchor of this size for layout + edge attachment; the overlay card uses the
+// same size so edges meet its border. Keep the two in sync via these constants.
+const NODE_CARD_WIDTH = 208;
+const NODE_CARD_HEIGHT = 72;
+
+// Inline lucide-style glyphs for the overlay cards. The overlay is plain DOM
+// (no React there), so icons are small static SVG strings tinted by currentColor.
+const CLOCK_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>';
+const READY_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M13 2 4.5 13.4H11l-1 8.6L19.5 9.8H13z"/></svg>';
 
 interface DependencyGraphViewProps {
   activeClusterNodeIds?: ReadonlySet<string>;
@@ -41,6 +50,7 @@ export function DependencyGraphView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const cardsByNodeIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const selectedNodeIdRef = useRef(selectedNodeId);
   const sensitivityRef = useRef(wheelSensitivity);
 
@@ -63,28 +73,18 @@ export function DependencyGraphView({
     const overlay = overlayRef.current;
 
     // cytoscape renders to canvas and cannot read CSS `var(...)`, so resolve the
-    // design tokens to concrete colors from the same single source the UI uses
-    // (src/styles.css `@theme`, ADR-0004) instead of duplicating values here.
+    // design tokens it still draws (the PRD group boxes and the dependency edges)
+    // to concrete colors from the same single source the UI uses (src/styles.css
+    // `@theme`, ADR-0004). The card nodes are HTML overlays and read the tokens
+    // directly via CSS, so their colors are no longer resolved here.
     const rootStyles = getComputedStyle(document.documentElement);
     const cssVar = (name: string, fallback: string) =>
       rootStyles.getPropertyValue(name).trim() || fallback;
-    const stageColor = (stage: (typeof stageDefinitions)[number]) =>
-      cssVar(`--color-stage-${stage.id}`, stage.color);
-    const stageSurface = (stage: (typeof stageDefinitions)[number]) =>
-      cssVar(`--color-stage-${stage.id}-surface`, "#161d2c");
-    const readyColor = cssVar("--color-ready", "#fbbf24");
     const satisfiedColor = cssVar("--color-dep-satisfied", "#34d399");
     const blockingColor = cssVar("--color-dep-blocking", "#6b7a90");
-    const accentColor = cssVar("--color-console-accent", "#38bdf8");
     const panelColor = cssVar("--color-console-panel", "#0f1521");
-    const elevatedColor = cssVar("--color-console-elevated", "#161d2c");
     const groupBorder = cssVar("--color-console-border-strong", "#33405c");
     const groupText = cssVar("--color-console-muted", "#93a1b8");
-    const nodeBorder = cssVar("--color-node-border", "#2b3650");
-    const nodeText = cssVar("--color-node-text", "#eaf0fb");
-    const nodeClosedSurface = cssVar("--color-node-closed-surface", "#0f141e");
-    const nodeClosedBorder = cssVar("--color-node-closed-border", "#232c3d");
-    const nodeClosedText = cssVar("--color-node-closed-text", "#6f7d96");
     const clusterFocusColor = cssVar("--color-dependency-cluster-focus", "#e0f2fe");
     const clusterDimColor = cssVar("--color-dependency-cluster-dim", "#475569");
     const nodeFont = cssVar("--font-sans", NODE_FONT_FALLBACK);
@@ -100,26 +100,16 @@ export function DependencyGraphView({
       userZoomingEnabled: false,
       style: [
         {
+          // Invisible layout anchor: the visible card is an HTML overlay (built
+          // below). Keeping the box transparent-but-present means edges still
+          // attach to the card's footprint and taps still hit-test the node.
           selector: 'node[card = "true"]',
           style: {
-            // A deep, neutral body; the stage rule below tints it. The label sits
-            // on a dark fill, so it stays crisp with no heavy text-outline.
-            "background-color": elevatedColor,
-            "border-color": nodeBorder,
-            "border-width": "1.5px",
-            color: nodeText,
-            "font-family": nodeFont,
-            "font-size": "11px",
-            "font-weight": 500,
-            height: "56px",
-            label: "data(label)",
-            "line-height": 1.3,
+            "background-opacity": 0,
+            "border-width": 0,
+            height: `${NODE_CARD_HEIGHT}px`,
             shape: "round-rectangle",
-            "text-halign": "center",
-            "text-max-width": "152px",
-            "text-valign": "center",
-            "text-wrap": "wrap",
-            width: "188px"
+            width: `${NODE_CARD_WIDTH}px`
           }
         },
         {
@@ -142,53 +132,6 @@ export function DependencyGraphView({
             "text-max-width": "320px",
             "text-valign": "top",
             "text-wrap": "wrap"
-          }
-        },
-        ...stageDefinitions.map((stage) => ({
-          selector: `node[card = "true"][stage = "${stage.id}"]`,
-          style: {
-            "background-color": stageSurface(stage),
-            "border-color": stageColor(stage),
-            "border-width": "1.5px"
-          }
-        })),
-        {
-          selector: 'node[card = "true"][state = "CLOSED"]',
-          style: {
-            "background-color": nodeClosedSurface,
-            "border-color": nodeClosedBorder,
-            color: nodeClosedText
-          }
-        },
-        {
-          selector: 'node[card = "true"][ready = "true"]',
-          style: {
-            "border-color": readyColor,
-            "border-width": "3px"
-          }
-        },
-        {
-          selector: 'node[card = "true"][cluster = "active"]',
-          style: {
-            "border-color": clusterFocusColor,
-            "border-width": "3px",
-            color: nodeText
-          }
-        },
-        {
-          selector: 'node[card = "true"][cluster = "dimmed"]',
-          style: {
-            "background-color": clusterDimColor,
-            "border-color": clusterDimColor,
-            color: clusterDimColor,
-            opacity: CLUSTER_DIM_OPACITY
-          }
-        },
-        {
-          selector: 'node[card = "true"][selected = "true"]',
-          style: {
-            "border-color": accentColor,
-            "border-width": "3px"
           }
         },
         {
@@ -257,63 +200,78 @@ export function DependencyGraphView({
 
     cyRef.current = cy;
 
-    // Synced HTML-overlay chips for things cytoscape's canvas label can't render
-    // apart from the title: the #N issue number (top-left) and, for open cards,
-    // a staleness badge (bottom-left). Declaring them as layers keeps a single
-    // create / position / dim / cleanup path — a new chip (e.g. a pin star) is
-    // one more entry, not another copy of the whole lifecycle. Each chip is
-    // repositioned and scaled from its node's rendered box on every frame.
-    const overlayLayers: Array<{
-      className: string;
-      text: (node: cytoscape.NodeSingular) => string | undefined;
-      offset: (box: ReturnType<cytoscape.NodeSingular["renderedBoundingBox"]>, zoom: number) => { x: number; y: number };
-    }> = [
-      {
-        className: "node-badge",
-        text: (node) => `#${node.id()}`,
-        offset: (box, zoom) => ({ x: box.x1 + 7 * zoom, y: box.y1 + 7 * zoom })
-      },
-      {
-        className: "node-staleness",
-        text: (node) => {
-          const label = node.data("stalenessLabel");
-          return typeof label === "string" && label.length > 0 ? label : undefined;
-        },
-        offset: (box, zoom) => ({ x: box.x1 + 8 * zoom, y: box.y2 - 20 * zoom })
-      }
-    ];
-
-    type OverlayChip = { el: HTMLDivElement; offset: (typeof overlayLayers)[number]["offset"] };
-    const chipsByNodeId = new Map<string, OverlayChip[]>();
+    // Each card node gets one HTML card in the overlay: a stage-colored left
+    // rail + a head row (#N, staleness chip, ready bolt) + a 2-line clamped
+    // title. Rich layout (flex, icons, ellipsis) is why this is DOM and not a
+    // cytoscape canvas label — the card stays scannable instead of letting the
+    // number and signals collide with a centered, overflowing title. The card is
+    // repositioned and scaled from its node's rendered box on every frame; the
+    // separate effect below toggles its selected / cluster state classes.
+    const cardsByNodeId = new Map<string, HTMLDivElement>();
     cy.nodes('[card = "true"]').forEach((node) => {
-      const chips: OverlayChip[] = [];
-      for (const layer of overlayLayers) {
-        const text = layer.text(node);
-        if (text === undefined) {
-          continue;
-        }
-        const el = document.createElement("div");
-        el.className = layer.className;
-        el.textContent = text;
-        overlay.appendChild(el);
-        chips.push({ el, offset: layer.offset });
+      const card = document.createElement("div");
+      card.className = "node-card";
+      card.style.width = `${NODE_CARD_WIDTH}px`;
+      card.style.height = `${NODE_CARD_HEIGHT}px`;
+      card.style.setProperty("--card-stage", `var(--color-stage-${String(node.data("stage"))})`);
+      if (node.data("state") === "CLOSED") {
+        card.classList.add("is-closed");
       }
-      if (chips.length > 0) {
-        chipsByNodeId.set(node.id(), chips);
+      const isReady = node.data("ready") === "true";
+      if (isReady) {
+        card.classList.add("is-ready");
       }
+
+      const head = document.createElement("div");
+      head.className = "node-card-head";
+
+      const idEl = document.createElement("span");
+      idEl.className = "node-card-id";
+      idEl.textContent = `#${node.id()}`;
+      head.appendChild(idEl);
+
+      const flags = document.createElement("div");
+      flags.className = "node-card-flags";
+
+      const stalenessLabel = node.data("stalenessLabel");
+      if (typeof stalenessLabel === "string" && stalenessLabel.length > 0) {
+        const chip = document.createElement("span");
+        chip.className = "node-card-staleness";
+        chip.dataset.sev = String(node.data("stalenessSeverity") ?? "recent");
+        chip.innerHTML = CLOCK_ICON_SVG;
+        const text = document.createElement("span");
+        text.textContent = stalenessLabel;
+        chip.appendChild(text);
+        flags.appendChild(chip);
+      }
+
+      if (isReady) {
+        const bolt = document.createElement("span");
+        bolt.className = "node-card-ready";
+        bolt.title = "就绪可派";
+        bolt.innerHTML = READY_ICON_SVG;
+        flags.appendChild(bolt);
+      }
+
+      head.appendChild(flags);
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "node-card-title";
+      const title = String(node.data("label") ?? "");
+      titleEl.textContent = title;
+      titleEl.title = title;
+
+      card.append(head, titleEl);
+      overlay.appendChild(card);
+      cardsByNodeId.set(node.id(), card);
     });
+    cardsByNodeIdRef.current = cardsByNodeId;
 
     const positionOverlays = () => {
       const zoom = cy.zoom();
-      chipsByNodeId.forEach((chips, id) => {
-        const node = cy.getElementById(id);
-        const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-        const opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
-        for (const { el, offset } of chips) {
-          const { x, y } = offset(box, zoom);
-          el.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
-          el.style.opacity = opacity;
-        }
+      cardsByNodeId.forEach((card, id) => {
+        const box = cy.getElementById(id).renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+        card.style.transform = `translate(${box.x1}px, ${box.y1}px) scale(${zoom})`;
       });
     };
 
@@ -345,7 +303,8 @@ export function DependencyGraphView({
       container.removeEventListener("wheel", handleWheel);
       resizeObserver.disconnect();
       cy.off("render", positionOverlays);
-      chipsByNodeId.forEach((chips) => chips.forEach((chip) => chip.el.remove()));
+      cardsByNodeId.forEach((card) => card.remove());
+      cardsByNodeIdRef.current = new Map();
       cyRef.current = null;
       cy.destroy();
     };
@@ -353,9 +312,10 @@ export function DependencyGraphView({
     // above, and the effect below syncs it without rebuilding the whole graph.
   }, [graph, groups, layoutMode, now, onSelectNodeId]);
 
-  // Reflect selection by mutating node data in place — rebuilding the cytoscape
-  // instance just to move the highlight would re-run dagre + cy.fit() on every
-  // tap, throwing away the user's pan/zoom and flickering.
+  // Reflect selection + cluster focus by toggling classes on the overlay cards
+  // and mutating edge data in place — rebuilding the cytoscape instance just to
+  // move the highlight would re-run dagre + cy.fit() on every tap, throwing away
+  // the user's pan/zoom and flickering.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) {
@@ -364,17 +324,14 @@ export function DependencyGraphView({
 
     const hasActiveCluster = Boolean(activeClusterNodeIds && activeClusterNodeIds.size > 0);
 
-    cy.batch(() => {
-      cy.nodes().forEach((node) => {
-        node.data("selected", node.id() === selectedNodeId ? "true" : "false");
-        if (node.data("card") === "true") {
-          node.data(
-            "cluster",
-            hasActiveCluster ? (activeClusterNodeIds?.has(node.id()) ? "active" : "dimmed") : "none"
-          );
-        }
-      });
+    cardsByNodeIdRef.current.forEach((card, id) => {
+      const inCluster = activeClusterNodeIds?.has(id) ?? false;
+      card.classList.toggle("is-selected", id === selectedNodeId);
+      card.classList.toggle("is-cluster-active", hasActiveCluster && inCluster);
+      card.classList.toggle("is-dimmed", hasActiveCluster && !inCluster);
+    });
 
+    cy.batch(() => {
       cy.edges().forEach((edge) => {
         edge.data(
           "cluster",

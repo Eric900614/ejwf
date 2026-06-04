@@ -116,7 +116,8 @@ describe("buildDependencyGraphElements", () => {
         stage: "triage",
         card: "true",
         state: "OPEN",
-        stalenessLabel: "3 天没动"
+        stalenessLabel: "3 天没动",
+        stalenessSeverity: "recent"
       },
       {
         id: "3",
