@@ -18,6 +18,7 @@ export interface BuildCodexCommandInput {
   model?: string;
   effort?: string;
   sandbox?: string;
+  color?: "always" | "auto" | "never";
 }
 
 export type BuildAgentCommandInput =
@@ -35,7 +36,8 @@ const CLAUDE_DEFAULTS = {
 
 // 派活默认在 workspace-write 沙箱跑（#30 spike：exec 下「不卡确认」的旋钮，且默认禁网够安全）。
 const CODEX_DEFAULTS = {
-  sandbox: "workspace-write"
+  sandbox: "workspace-write",
+  color: "never"
 } as const;
 
 export function buildAgentCommand(input: BuildAgentCommandInput): AgentCommand {
@@ -70,8 +72,9 @@ function buildClaudeArgs(input: BuildClaudeCommandInput): string[] {
 
 function buildCodexArgs(input: BuildCodexCommandInput): string[] {
   const sandbox = input.sandbox ?? CODEX_DEFAULTS.sandbox;
+  const color = input.color ?? CODEX_DEFAULTS.color;
 
-  const args = ["exec", "--sandbox", sandbox];
+  const args = ["exec", "--sandbox", sandbox, "--color", color];
   if (input.model !== undefined) {
     args.push("-m", input.model);
   }

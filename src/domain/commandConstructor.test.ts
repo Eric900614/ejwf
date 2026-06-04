@@ -61,6 +61,8 @@ describe("buildAgentCommand", () => {
       "exec",
       "--sandbox",
       "workspace-write",
+      "--color",
+      "never",
       "把 #36 命令构造器做完。"
     ]);
     // 提示词是 argv 最后一个元素，且只出现一次
@@ -79,6 +81,8 @@ describe("buildAgentCommand", () => {
       "exec",
       "--sandbox",
       "workspace-write",
+      "--color",
+      "never",
       "-m",
       "gpt-5.5",
       "干活。"
@@ -96,8 +100,28 @@ describe("buildAgentCommand", () => {
       "exec",
       "--sandbox",
       "workspace-write",
+      "--color",
+      "never",
       "-c",
       "model_reasoning_effort=high",
+      "干活。"
+    ]);
+  });
+
+  it("Codex 可覆盖沙箱和输出颜色", () => {
+    const command = buildAgentCommand({
+      agent: "codex",
+      prompt: "干活。",
+      sandbox: "danger-full-access",
+      color: "auto"
+    });
+
+    expect(command.args).toEqual([
+      "exec",
+      "--sandbox",
+      "danger-full-access",
+      "--color",
+      "auto",
       "干活。"
     ]);
   });
