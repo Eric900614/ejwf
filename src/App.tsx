@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ExternalLink,
@@ -77,6 +77,12 @@ export function App() {
     }
   }, [selectedNodeId, visibleGraph]);
 
+  // Mirror the latest pinned set into a ref so togglePinnedNodeId can stay
+  // referentially stable (empty dep list) — it's passed down to
+  // DependencyGraphView, and a changing identity would be churn there.
+  const pinnedNodeIdsRef = useRef(pinnedNodeIds);
+  pinnedNodeIdsRef.current = pinnedNodeIds;
+
   const togglePinnedNodeId = useCallback((nodeId: string) => {
     const cardNumber = Number(nodeId);
 
@@ -84,15 +90,24 @@ export function App() {
       return;
     }
 
+    // Persist outside the state updater: React StrictMode double-invokes
+    // updaters, so a localStorage write in there would fire twice. The set
+    // update below stays a pure function of its previous value.
+    const shouldPin = !pinnedNodeIdsRef.current.has(nodeId);
+
+    if (shouldPin) {
+      pinCard(window.localStorage, sourceRepo, cardNumber);
+    } else {
+      unpinCard(window.localStorage, sourceRepo, cardNumber);
+    }
+
     setPinnedNodeIds((current) => {
       const next = new Set(current);
 
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-        unpinCard(window.localStorage, sourceRepo, cardNumber);
-      } else {
+      if (shouldPin) {
         next.add(nodeId);
-        pinCard(window.localStorage, sourceRepo, cardNumber);
+      } else {
+        next.delete(nodeId);
       }
 
       return next;
