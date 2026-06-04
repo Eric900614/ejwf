@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ExternalLink,
@@ -10,12 +10,15 @@ import {
   Network,
   Palette,
   RefreshCw,
+  Star,
   X
 } from "lucide-react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { getDependencyClusterNodeIds } from "./domain/dependencyCluster";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { lintCards } from "./domain/linter";
+import { filterPinnedGraph } from "./domain/pinnedGraph";
+import { loadPinnedNodeIds, pinCard, unpinCard } from "./domain/pins";
 import { buildPrdGroups } from "./domain/prdGroups";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
 import { filterVisibleGraph } from "./domain/visibleGraph";
@@ -25,6 +28,7 @@ import type { ResolvedAdrReference } from "./domain/adr";
 
 const graph = buildDependencyGraph(cards);
 const lintWarnings = lintCards(cards);
+const cardNumbers = cards.map((card) => card.number);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const cardByNumber = new Map(cards.map((card) => [card.number, card]));
 const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
@@ -43,16 +47,24 @@ export function App() {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("list");
   const [wheelSensitivity, setWheelSensitivity] = useState(0.3);
   const [now] = useState(() => new Date());
+  const [pinnedNodeIds, setPinnedNodeIds] = useState<Set<string>>(() =>
+    typeof window === "undefined" ? new Set() : loadPinnedNodeIds(window.localStorage, sourceRepo, cardNumbers)
+  );
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
 
   // Memoize so the filtered graph and groups keep a stable identity across
   // renders that don't toggle showClosedCards — otherwise every node tap hands
   // DependencyGraphView fresh graph/groups props and forces a full cytoscape
   // rebuild (re-running the layout + cy.fit(), discarding the user's pan/zoom).
-  const visibleGraph = useMemo(() => filterVisibleGraph(graph, { showClosedCards }), [showClosedCards]);
+  const visibleScopeGraph = useMemo(() => filterVisibleGraph(graph, { showClosedCards }), [showClosedCards]);
+  const visibleGraph = useMemo(
+    () => (showPinnedOnly ? filterPinnedGraph(visibleScopeGraph, pinnedNodeIds) : visibleScopeGraph),
+    [pinnedNodeIds, showPinnedOnly, visibleScopeGraph]
+  );
   const prdGroups = useMemo(() => buildPrdGroups(visibleGraph), [visibleGraph]);
   const selectedNode = visibleGraph.nodes.find((node) => node.id === selectedNodeId);
   const visibleCards = visibleGraph.nodes.map((node) => node.card);
-  const hiddenClosedCount = graph.nodes.length - visibleGraph.nodes.length;
+  const hiddenClosedCount = graph.nodes.length - visibleScopeGraph.nodes.length;
   const readyCount = visibleGraph.nodes.filter((node) => node.isReady).length;
   const activeClusterNodeIds = useMemo(
     () => (selectedNodeId ? getDependencyClusterNodeIds(visibleGraph, selectedNodeId) : undefined),
@@ -64,6 +76,43 @@ export function App() {
       setSelectedNodeId(undefined);
     }
   }, [selectedNodeId, visibleGraph]);
+
+  // Mirror the latest pinned set into a ref so togglePinnedNodeId can stay
+  // referentially stable (empty dep list) — it's passed down to
+  // DependencyGraphView, and a changing identity would be churn there.
+  const pinnedNodeIdsRef = useRef(pinnedNodeIds);
+  pinnedNodeIdsRef.current = pinnedNodeIds;
+
+  const togglePinnedNodeId = useCallback((nodeId: string) => {
+    const cardNumber = Number(nodeId);
+
+    if (!Number.isFinite(cardNumber)) {
+      return;
+    }
+
+    // Persist outside the state updater: React StrictMode double-invokes
+    // updaters, so a localStorage write in there would fire twice. The set
+    // update below stays a pure function of its previous value.
+    const shouldPin = !pinnedNodeIdsRef.current.has(nodeId);
+
+    if (shouldPin) {
+      pinCard(window.localStorage, sourceRepo, cardNumber);
+    } else {
+      unpinCard(window.localStorage, sourceRepo, cardNumber);
+    }
+
+    setPinnedNodeIds((current) => {
+      const next = new Set(current);
+
+      if (shouldPin) {
+        next.add(nodeId);
+      } else {
+        next.delete(nodeId);
+      }
+
+      return next;
+    });
+  }, []);
 
   async function refreshFromGitHub() {
     setRefreshState("refreshing");
@@ -138,6 +187,22 @@ export function App() {
             <span className="hidden sm:inline">{refreshState === "failed" ? "重试" : "刷新"}</span>
           </button>
 
+          <button
+            aria-pressed={showPinnedOnly}
+            className={
+              showPinnedOnly
+                ? "flex h-8 items-center gap-1.5 rounded-md border border-pin/45 bg-pin/10 px-2.5 text-xs font-medium text-pin"
+                : "flex h-8 items-center gap-1.5 rounded-md border border-console-border bg-console-bg px-2.5 text-xs font-medium text-console-muted transition hover:text-console-text"
+            }
+            onClick={() => setShowPinnedOnly((value) => !value)}
+            title="只看我盯的卡和它们的血脉"
+            type="button"
+          >
+            <Star className="h-4 w-4" />
+            <span className="hidden sm:inline">只看盯</span>
+            {pinnedNodeIds.size > 0 ? <span className="font-mono">{pinnedNodeIds.size}</span> : null}
+          </button>
+
           <label className="flex items-center gap-1.5 text-xs text-console-muted" title="滚轮缩放灵敏度">
             <span className="hidden md:inline">灵敏度</span>
             <input
@@ -172,6 +237,8 @@ export function App() {
               activeClusterNodeIds={activeClusterNodeIds}
               now={now}
               onSelectNodeId={setSelectedNodeId}
+              onTogglePinnedNodeId={togglePinnedNodeId}
+              pinnedNodeIds={pinnedNodeIds}
               selectedNodeId={selectedNodeId}
               wheelSensitivity={wheelSensitivity}
             />

@@ -130,4 +130,31 @@ describe("buildDependencyGraphElements", () => {
       }
     ]);
   });
+
+  it("把盯标记放进图元素，供界面画星标", () => {
+    const cards: Card[] = [
+      {
+        number: 23,
+        title: "重点卡",
+        state: "OPEN",
+        body: ""
+      }
+    ];
+    const graph = buildDependencyGraph(cards);
+
+    expect(
+      buildDependencyGraphElements(graph, { pinnedNodeIds: new Set(["23"]) }).map((element) => element.data)
+    ).toEqual([
+      {
+        id: "23",
+        label: "重点卡",
+        ready: "false",
+        selected: "false",
+        stage: "triage",
+        card: "true",
+        state: "OPEN",
+        pinned: "true"
+      }
+    ]);
+  });
 });

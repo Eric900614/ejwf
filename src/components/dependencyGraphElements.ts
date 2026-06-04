@@ -6,6 +6,7 @@ import { describeStaleness } from "../domain/staleness";
 interface DependencyGraphElementOptions {
   groups?: PrdGroup[];
   now?: Date;
+  pinnedNodeIds?: ReadonlySet<string>;
   selectedNodeId?: string;
 }
 
@@ -47,6 +48,7 @@ export function buildDependencyGraphElements(
           stage: node.stage,
           card: "true",
           state: node.card.state,
+          ...(options.pinnedNodeIds?.has(node.id) ? { pinned: "true" } : {}),
           ...(staleness
             ? { stalenessLabel: staleness.label, stalenessSeverity: staleness.severity }
             : {}),

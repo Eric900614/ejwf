@@ -1,6 +1,6 @@
 import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getDependencyClusterNodeIds } from "../domain/dependencyCluster";
 import type { DependencyGraph } from "../domain/graph";
 import type { PrdGroup } from "../domain/prdGroups";
@@ -25,6 +25,8 @@ const CLOCK_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>';
 const READY_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M13 2 4.5 13.4H11l-1 8.6L19.5 9.8H13z"/></svg>';
+const PIN_ICON_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z"/></svg>';
 
 interface DependencyGraphViewProps {
   activeClusterNodeIds?: ReadonlySet<string>;
@@ -33,6 +35,8 @@ interface DependencyGraphViewProps {
   layoutMode?: "dag" | "grouped";
   now?: Date;
   onSelectNodeId?: (nodeId: string | undefined) => void;
+  onTogglePinnedNodeId?: (nodeId: string) => void;
+  pinnedNodeIds?: ReadonlySet<string>;
   selectedNodeId?: string;
   wheelSensitivity?: number;
 }
@@ -44,6 +48,8 @@ export function DependencyGraphView({
   layoutMode = "dag",
   now,
   onSelectNodeId,
+  onTogglePinnedNodeId,
+  pinnedNodeIds,
   selectedNodeId,
   wheelSensitivity = 0.3
 }: DependencyGraphViewProps) {
@@ -51,6 +57,7 @@ export function DependencyGraphView({
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const cardsByNodeIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [pinMenu, setPinMenu] = useState<{ nodeId: string; x: number; y: number } | undefined>(undefined);
   const selectedNodeIdRef = useRef(selectedNodeId);
   const sensitivityRef = useRef(wheelSensitivity);
 
@@ -91,7 +98,7 @@ export function DependencyGraphView({
 
     const cy = cytoscape({
       container,
-      elements: buildDependencyGraphElements(graph, { groups, now, selectedNodeId }),
+      elements: buildDependencyGraphElements(graph, { groups, now, pinnedNodeIds, selectedNodeId }),
       layout: getLayout(layoutMode),
       maxZoom: 2,
       minZoom: 0.2,
@@ -192,10 +199,22 @@ export function DependencyGraphView({
       onSelectNodeId?.(selectedNodeIdRef.current === nodeId ? undefined : nodeId);
     });
     cy.on("tap", (event) => {
+      setPinMenu(undefined);
       if (event.target === cy) {
         lastTappedNodeId = undefined;
         onSelectNodeId?.(undefined);
       }
+    });
+    cy.on("cxttap", 'node[card = "true"]', (event) => {
+      const nodeId = String(event.target.id());
+      const originalEvent = event.originalEvent as MouseEvent | undefined;
+      originalEvent?.preventDefault();
+      const rect = container.getBoundingClientRect();
+      setPinMenu({
+        nodeId,
+        x: (originalEvent?.clientX ?? rect.left) - rect.left,
+        y: (originalEvent?.clientY ?? rect.top) - rect.top
+      });
     });
 
     cyRef.current = cy;
@@ -221,6 +240,9 @@ export function DependencyGraphView({
       if (isReady) {
         card.classList.add("is-ready");
       }
+      if (node.data("pinned") === "true") {
+        card.classList.add("is-pinned");
+      }
 
       const head = document.createElement("div");
       head.className = "node-card-head";
@@ -232,6 +254,12 @@ export function DependencyGraphView({
 
       const flags = document.createElement("div");
       flags.className = "node-card-flags";
+
+      const pin = document.createElement("span");
+      pin.className = "node-card-pin";
+      pin.title = "已盯";
+      pin.innerHTML = PIN_ICON_SVG;
+      flags.appendChild(pin);
 
       const stalenessLabel = node.data("stalenessLabel");
       if (typeof stalenessLabel === "string" && stalenessLabel.length > 0) {
@@ -310,7 +338,7 @@ export function DependencyGraphView({
     };
     // selectedNodeId is intentionally excluded: the initial highlight is seeded
     // above, and the effect below syncs it without rebuilding the whole graph.
-  }, [graph, groups, layoutMode, now, onSelectNodeId]);
+  }, [graph, groups, layoutMode, now, onSelectNodeId, onTogglePinnedNodeId]);
 
   // Reflect selection + cluster focus by toggling classes on the overlay cards
   // and mutating edge data in place — rebuilding the cytoscape instance just to
@@ -329,6 +357,7 @@ export function DependencyGraphView({
       card.classList.toggle("is-selected", id === selectedNodeId);
       card.classList.toggle("is-cluster-active", hasActiveCluster && inCluster);
       card.classList.toggle("is-dimmed", hasActiveCluster && !inCluster);
+      card.classList.toggle("is-pinned", pinnedNodeIds?.has(id) ?? false);
     });
 
     cy.batch(() => {
@@ -345,12 +374,12 @@ export function DependencyGraphView({
         );
       });
     });
-  }, [activeClusterNodeIds, graph, selectedNodeId]);
+  }, [activeClusterNodeIds, graph, pinnedNodeIds, selectedNodeId]);
 
   if (graph.nodes.length === 0) {
     return (
       <div className="flex h-full min-h-[560px] items-center justify-center bg-console-bg p-8 text-center text-sm text-console-dim">
-        还没有本地数据。运行 npm run fetch 拉取 open 卡片。
+        没有可显示的卡片。
       </div>
     );
   }
@@ -359,6 +388,23 @@ export function DependencyGraphView({
     <div className="relative h-full w-full bg-console-bg">
       <div aria-label="卡片依赖图" className="h-full w-full" ref={containerRef} />
       <div className="node-overlay" ref={overlayRef} />
+      {pinMenu ? (
+        <div
+          className="pin-menu"
+          style={{ left: pinMenu.x, top: pinMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            onClick={() => {
+              onTogglePinnedNodeId?.(pinMenu.nodeId);
+              setPinMenu(undefined);
+            }}
+            type="button"
+          >
+            {pinnedNodeIds?.has(pinMenu.nodeId) ? "取消盯" : "盯上"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
