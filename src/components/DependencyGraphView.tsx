@@ -257,42 +257,63 @@ export function DependencyGraphView({
 
     cyRef.current = cy;
 
-    // #N corner badges as a synced HTML overlay: cytoscape's canvas label can't
-    // style the issue number apart from the title, so the node face shows only
-    // the title and each number rides the top-left corner as its own badge,
-    // repositioned and scaled from the node's rendered box on every frame.
-    const badgeByNodeId = new Map<string, HTMLDivElement>();
-    const stalenessByNodeId = new Map<string, HTMLDivElement>();
-    cy.nodes('[card = "true"]').forEach((node) => {
-      const badge = document.createElement("div");
-      badge.className = "node-badge";
-      badge.textContent = `#${node.id()}`;
-      overlay.appendChild(badge);
-      badgeByNodeId.set(node.id(), badge);
+    // Synced HTML-overlay chips for things cytoscape's canvas label can't render
+    // apart from the title: the #N issue number (top-left) and, for open cards,
+    // a staleness badge (bottom-left). Declaring them as layers keeps a single
+    // create / position / dim / cleanup path — a new chip (e.g. a pin star) is
+    // one more entry, not another copy of the whole lifecycle. Each chip is
+    // repositioned and scaled from its node's rendered box on every frame.
+    const overlayLayers: Array<{
+      className: string;
+      text: (node: cytoscape.NodeSingular) => string | undefined;
+      offset: (box: ReturnType<cytoscape.NodeSingular["renderedBoundingBox"]>, zoom: number) => { x: number; y: number };
+    }> = [
+      {
+        className: "node-badge",
+        text: (node) => `#${node.id()}`,
+        offset: (box, zoom) => ({ x: box.x1 + 7 * zoom, y: box.y1 + 7 * zoom })
+      },
+      {
+        className: "node-staleness",
+        text: (node) => {
+          const label = node.data("stalenessLabel");
+          return typeof label === "string" && label.length > 0 ? label : undefined;
+        },
+        offset: (box, zoom) => ({ x: box.x1 + 8 * zoom, y: box.y2 - 20 * zoom })
+      }
+    ];
 
-      const stalenessLabel = node.data("stalenessLabel");
-      if (typeof stalenessLabel === "string" && stalenessLabel.length > 0) {
-        const staleness = document.createElement("div");
-        staleness.className = "node-staleness";
-        staleness.textContent = stalenessLabel;
-        overlay.appendChild(staleness);
-        stalenessByNodeId.set(node.id(), staleness);
+    type OverlayChip = { el: HTMLDivElement; offset: (typeof overlayLayers)[number]["offset"] };
+    const chipsByNodeId = new Map<string, OverlayChip[]>();
+    cy.nodes('[card = "true"]').forEach((node) => {
+      const chips: OverlayChip[] = [];
+      for (const layer of overlayLayers) {
+        const text = layer.text(node);
+        if (text === undefined) {
+          continue;
+        }
+        const el = document.createElement("div");
+        el.className = layer.className;
+        el.textContent = text;
+        overlay.appendChild(el);
+        chips.push({ el, offset: layer.offset });
+      }
+      if (chips.length > 0) {
+        chipsByNodeId.set(node.id(), chips);
       }
     });
 
     const positionOverlays = () => {
       const zoom = cy.zoom();
-      badgeByNodeId.forEach((badge, id) => {
+      chipsByNodeId.forEach((chips, id) => {
         const node = cy.getElementById(id);
         const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-        badge.style.transform = `translate(${box.x1 + 7 * zoom}px, ${box.y1 + 7 * zoom}px) scale(${zoom})`;
-        badge.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
-      });
-      stalenessByNodeId.forEach((staleness, id) => {
-        const node = cy.getElementById(id);
-        const box = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
-        staleness.style.transform = `translate(${box.x1 + 8 * zoom}px, ${box.y2 - 20 * zoom}px) scale(${zoom})`;
-        staleness.style.opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
+        const opacity = node.data("cluster") === "dimmed" ? String(CLUSTER_DIM_OPACITY) : "1";
+        for (const { el, offset } of chips) {
+          const { x, y } = offset(box, zoom);
+          el.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+          el.style.opacity = opacity;
+        }
       });
     };
 
@@ -324,8 +345,7 @@ export function DependencyGraphView({
       container.removeEventListener("wheel", handleWheel);
       resizeObserver.disconnect();
       cy.off("render", positionOverlays);
-      badgeByNodeId.forEach((badge) => badge.remove());
-      stalenessByNodeId.forEach((staleness) => staleness.remove());
+      chipsByNodeId.forEach((chips) => chips.forEach((chip) => chip.el.remove()));
       cyRef.current = null;
       cy.destroy();
     };
