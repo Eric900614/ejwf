@@ -17,7 +17,7 @@ const NODE_FONT_FALLBACK = '"PingFang SC", "Microsoft YaHei", ui-sans-serif, sys
 // anchor of this size for layout + edge attachment; the overlay card uses the
 // same size so edges meet its border. Keep the two in sync via these constants.
 const NODE_CARD_WIDTH = 208;
-const NODE_CARD_HEIGHT = 72;
+const NODE_CARD_HEIGHT = 64;
 
 // Inline lucide-style glyphs for the overlay cards. The overlay is plain DOM
 // (no React there), so icons are small static SVG strings tinted by currentColor.
