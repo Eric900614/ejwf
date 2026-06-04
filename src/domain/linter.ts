@@ -1,5 +1,6 @@
 import { parseBlockedByEdges } from "./blockedBy";
 import { parseCardRelations } from "./relations";
+import { extractSection } from "./section";
 import type { Card, ParseWarning } from "./types";
 
 export function lintCards(cards: Card[]): ParseWarning[] {
@@ -80,11 +81,6 @@ export function lintCards(cards: Card[]): ParseWarning[] {
   }
 
   return warnings;
-}
-
-function extractSection(body: string, heading: string): string | undefined {
-  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return body.match(new RegExp(`(?:^|\\r?\\n)##\\s*${escapedHeading}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n##\\s|$)`, "i"))?.[1];
 }
 
 function findMalformedAdrReferences(body: string): string[] {

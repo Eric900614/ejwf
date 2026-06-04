@@ -1,3 +1,4 @@
+import { extractSection } from "./section";
 import type { AdrReferenceEdge, Card, ParentPrdEdge } from "./types";
 
 export interface CardRelations {
@@ -13,8 +14,7 @@ export function parseCardRelations(card: Card): CardRelations {
 }
 
 function parseParentPrd(card: Card): ParentPrdEdge | undefined {
-  const parentSection =
-    card.body.match(/(?:^|\r?\n)##\s*Parent\s*\r?\n([\s\S]*?)(?=\r?\n##\s|$)/i)?.[1] ?? "";
+  const parentSection = extractSection(card.body, "Parent") ?? "";
   const parentMatch = parentSection.match(/#(\d+)(?:\s*[—-]\s*(.+))?/);
 
   if (!parentMatch) {
