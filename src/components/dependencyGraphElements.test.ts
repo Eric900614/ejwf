@@ -39,6 +39,7 @@ describe("buildDependencyGraphElements", () => {
         selected: "false",
         stage: "triage",
         card: "true",
+        state: "OPEN",
         parent: "prd-1"
       },
       {
@@ -48,6 +49,7 @@ describe("buildDependencyGraphElements", () => {
         selected: "false",
         stage: "triage",
         card: "true",
+        state: "OPEN",
         parent: "prd-1"
       },
       {
@@ -55,6 +57,30 @@ describe("buildDependencyGraphElements", () => {
         source: "2",
         status: "blocking",
         target: "6"
+      }
+    ]);
+  });
+
+  it("把 closed 卡状态放进图元素，供界面灰显", () => {
+    const cards: Card[] = [
+      {
+        number: 2,
+        title: "已完成前置",
+        state: "CLOSED",
+        body: ""
+      }
+    ];
+    const graph = buildDependencyGraph(cards);
+
+    expect(buildDependencyGraphElements(graph).map((element) => element.data)).toEqual([
+      {
+        id: "2",
+        label: "#2\n已完成前置",
+        ready: "false",
+        selected: "false",
+        stage: "done",
+        card: "true",
+        state: "CLOSED"
       }
     ]);
   });

@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DependencyGraphView } from "./components/DependencyGraphView";
 import { buildDependencyGraph, type GraphNode } from "./domain/graph";
 import { buildPrdGroups } from "./domain/prdGroups";
 import { deriveCardStage, stageDefinitions } from "./domain/stage";
+import { filterVisibleGraph } from "./domain/visibleGraph";
 import { adrDocuments, cards, fetchedAt, sourceRepo } from "./data/cards.generated";
 import type { ResolvedAdrReference } from "./domain/adr";
 
 const graph = buildDependencyGraph(cards);
-const prdGroups = buildPrdGroups(graph);
 const readyByCardNumber = new Map(graph.nodes.map((node) => [node.card.number, node.isReady]));
 const cardByNumber = new Map(cards.map((card) => [card.number, card]));
 const adrDocumentByCode = new Map(adrDocuments.map((document) => [document.code, document]));
@@ -18,7 +18,34 @@ const fetchedLabel = fetchedAt ? new Date(fetchedAt).toLocaleString("zh-CN") : "
 export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(defaultSelectedNodeId);
   const [viewMode, setViewMode] = useState<"prd" | "dag">("prd");
-  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId);
+  const [showClosedCards, setShowClosedCards] = useState(false);
+  const [refreshState, setRefreshState] = useState<"idle" | "refreshing" | "failed">("idle");
+  // Memoize so the filtered graph and groups keep a stable identity across
+  // renders that don't toggle showClosedCards — otherwise every node tap hands
+  // DependencyGraphView fresh graph/groups props and forces a full cytoscape
+  // rebuild (re-running the layout + cy.fit(), discarding the user's pan/zoom).
+  const visibleGraph = useMemo(() => filterVisibleGraph(graph, { showClosedCards }), [showClosedCards]);
+  const prdGroups = useMemo(() => buildPrdGroups(visibleGraph), [visibleGraph]);
+  const selectedNode = visibleGraph.nodes.find((node) => node.id === selectedNodeId);
+  const visibleCards = visibleGraph.nodes.map((node) => node.card);
+  const hiddenClosedCount = graph.nodes.length - visibleGraph.nodes.length;
+  const refreshLabel = refreshState === "refreshing" ? "刷新中" : "手动刷新";
+
+  async function refreshFromGitHub() {
+    setRefreshState("refreshing");
+
+    try {
+      const response = await fetch("/api/refresh", { method: "POST" });
+
+      if (!response.ok) {
+        throw new Error("refresh failed");
+      }
+
+      window.location.reload();
+    } catch {
+      setRefreshState("failed");
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
@@ -31,34 +58,53 @@ export function App() {
             </h1>
           </div>
           <div className="flex flex-col gap-3 md:items-end">
-            <div
-              aria-label="视图切换"
-              className="inline-grid grid-cols-2 rounded border border-slate-200 bg-slate-100 p-1 text-sm"
-              role="group"
-            >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <div
+                aria-label="视图切换"
+                className="inline-grid grid-cols-2 rounded border border-slate-200 bg-slate-100 p-1 text-sm"
+                role="group"
+              >
+                <button
+                  aria-pressed={viewMode === "prd"}
+                  className={viewMode === "prd" ? activeViewButtonClass : inactiveViewButtonClass}
+                  onClick={() => setViewMode("prd")}
+                  type="button"
+                >
+                  按 PRD 分组
+                </button>
+                <button
+                  aria-pressed={viewMode === "dag"}
+                  className={viewMode === "dag" ? activeViewButtonClass : inactiveViewButtonClass}
+                  onClick={() => setViewMode("dag")}
+                  type="button"
+                >
+                  依赖图
+                </button>
+              </div>
+              <label className="flex h-9 items-center gap-2 rounded border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+                <input
+                  checked={showClosedCards}
+                  className="h-4 w-4 accent-slate-900"
+                  onChange={(event) => setShowClosedCards(event.target.checked)}
+                  type="checkbox"
+                />
+                显示已关闭卡
+              </label>
               <button
-                aria-pressed={viewMode === "prd"}
-                className={viewMode === "prd" ? activeViewButtonClass : inactiveViewButtonClass}
-                onClick={() => setViewMode("prd")}
+                className="h-9 rounded border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-700 disabled:cursor-wait disabled:opacity-60"
+                disabled={refreshState === "refreshing"}
+                onClick={refreshFromGitHub}
                 type="button"
               >
-                按 PRD 分组
-              </button>
-              <button
-                aria-pressed={viewMode === "dag"}
-                className={viewMode === "dag" ? activeViewButtonClass : inactiveViewButtonClass}
-                onClick={() => setViewMode("dag")}
-                type="button"
-              >
-                依赖图
+                {refreshLabel}
               </button>
             </div>
             <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-6">
               <Metric label="repo" value={sourceRepo} />
               <Metric label="分组" value={String(prdGroups.length)} />
-              <Metric label="卡片" value={String(graph.nodes.length)} />
-              <Metric label="依赖边" value={String(graph.edges.length)} />
-              <Metric label="就绪" value={String(graph.nodes.filter((node) => node.isReady).length)} />
+              <Metric label="卡片" value={String(visibleGraph.nodes.length)} />
+              <Metric label="依赖边" value={String(visibleGraph.edges.length)} />
+              <Metric label="就绪" value={String(visibleGraph.nodes.filter((node) => node.isReady).length)} />
               <Metric label="拉取时间" value={fetchedLabel} />
             </dl>
           </div>
@@ -68,12 +114,17 @@ export function App() {
       <section className="mx-auto grid max-w-7xl gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-h-[560px] self-start overflow-auto rounded border border-slate-200 bg-white">
           <DependencyGraphView
-            graph={graph}
+            graph={visibleGraph}
             groups={viewMode === "prd" ? prdGroups : undefined}
             layoutMode={viewMode === "prd" ? "grouped" : "dag"}
             onSelectNodeId={setSelectedNodeId}
             selectedNodeId={selectedNodeId}
           />
+          <div className="border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
+            默认隐藏已关闭卡。没有箭头通常表示前置已完成并被隐藏；打开“显示已关闭卡”可看完整链路。
+            {hiddenClosedCount > 0 && !showClosedCards ? ` 当前隐藏 ${hiddenClosedCount} 张已关闭卡。` : ""}
+            {refreshState === "failed" ? " 刷新失败，请确认本机 gh 已登录后重试。" : ""}
+          </div>
         </div>
         <aside className="rounded border border-slate-200 bg-white p-4">
           <NodeDetails
@@ -118,9 +169,13 @@ export function App() {
 
           <h2 className="mt-5 text-base font-semibold">卡片列表</h2>
           <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
-            {cards.map((card) => (
+            {visibleCards.map((card) => (
               <a
-                className="block rounded border border-slate-200 px-3 py-2 text-sm hover:border-sky-400 hover:bg-sky-50"
+                className={
+                  card.state === "CLOSED"
+                    ? "block rounded border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 hover:border-sky-400 hover:bg-sky-50"
+                    : "block rounded border border-slate-200 px-3 py-2 text-sm hover:border-sky-400 hover:bg-sky-50"
+                }
                 href={card.url}
                 key={card.number}
                 rel="noreferrer"
@@ -135,6 +190,11 @@ export function App() {
                   <span className="min-w-0">
                     <span className="font-semibold text-slate-700">#{card.number}</span>{" "}
                     <span className="text-slate-900">{card.title}</span>
+                    {card.state === "CLOSED" ? (
+                      <span className="ml-2 inline-block rounded-sm bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+                        已关闭
+                      </span>
+                    ) : null}
                     {readyByCardNumber.get(card.number) ? (
                       <span className="ml-2 inline-block rounded-sm bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
                         就绪

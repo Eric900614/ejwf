@@ -102,6 +102,14 @@ export function DependencyGraphView({
           };
         }),
         {
+          selector: 'node[card = "true"][state = "CLOSED"]',
+          style: {
+            "background-color": "#e2e8f0",
+            "border-color": "#94a3b8",
+            color: "#475569"
+          }
+        },
+        {
           selector: 'node[card = "true"][ready = "true"]',
           style: {
             "border-color": readyColor,

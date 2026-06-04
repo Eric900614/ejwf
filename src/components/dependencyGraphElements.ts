@@ -37,6 +37,7 @@ export function buildDependencyGraphElements(
         selected: node.id === options.selectedNodeId ? "true" : "false",
         stage: node.stage,
         card: "true",
+        state: node.card.state,
         ...(groupByNodeId.has(node.id) ? { parent: groupByNodeId.get(node.id) } : {})
       },
       ...(nodePositionById.has(node.id) ? { position: nodePositionById.get(node.id) } : {})
